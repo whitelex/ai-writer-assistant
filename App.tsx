@@ -3,15 +3,19 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { Editor } from './components/Editor';
 import { AIModal } from './components/AIModal';
+import { Auth } from './components/Auth';
 import { storageService } from './services/storageService';
+import { authService } from './services/authService';
 import { geminiService } from './services/geminiService';
-import { Book, Chapter, AIResult } from './types';
+import { Book, Chapter, AIResult, User, StorageMode } from './types';
 
 const App: React.FC = () => {
+  const [user, setUser] = useState<User | null>(null);
   const [books, setBooks] = useState<Book[]>([]);
   const [activeBookId, setActiveBookId] = useState<string | null>(null);
   const [activeChapterId, setActiveChapterId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [storageMode, setStorageMode] = useState<StorageMode>('simulated');
   
   // AI State
   const [isAIProcessing, setIsAIProcessing] = useState(false);
@@ -20,39 +24,71 @@ const App: React.FC = () => {
 
   useEffect(() => {
     const init = async () => {
-      const data = await storageService.getBooks();
-      setBooks(data);
-      if (data.length > 0) {
-        setActiveBookId(data[0].id);
-        setActiveChapterId(data[0].chapters[0].id);
+      const currentUser = authService.getCurrentUser();
+      if (currentUser) {
+        setUser(currentUser);
+        const result = await storageService.getBooks(currentUser.id);
+        setBooks(result.books);
+        setStorageMode(result.mode);
+        if (result.books.length > 0) {
+          setActiveBookId(result.books[0].id);
+          setActiveChapterId(result.books[0].chapters[0].id);
+        }
       }
       setLoading(false);
     };
     init();
   }, []);
 
+  const handleAuthSuccess = async (authenticatedUser: User) => {
+    setUser(authenticatedUser);
+    setLoading(true);
+    const result = await storageService.getBooks(authenticatedUser.id);
+    setBooks(result.books);
+    setStorageMode(result.mode);
+    if (result.books.length > 0) {
+      setActiveBookId(result.books[0].id);
+      setActiveChapterId(result.books[0].chapters[0].id);
+    } else {
+      setActiveBookId(null);
+      setActiveChapterId(null);
+    }
+    setLoading(false);
+  };
+
+  const handleLogout = () => {
+    authService.logout();
+    setUser(null);
+    setBooks([]);
+    setActiveBookId(null);
+    setActiveChapterId(null);
+  };
+
   const activeBook = books.find(b => b.id === activeBookId) || null;
   const activeChapter = activeBook?.chapters.find(c => c.id === activeChapterId) || null;
 
   const handleUpdateContent = useCallback(async (content: string) => {
-    if (activeBookId && activeChapterId) {
-      const updatedBooks = await storageService.updateChapter(activeBookId, activeChapterId, content);
-      setBooks(updatedBooks);
+    if (user && activeBookId && activeChapterId) {
+      const result = await storageService.updateChapter(activeBookId, activeChapterId, content, user.id);
+      setBooks(result.books);
+      setStorageMode(result.mode);
     }
-  }, [activeBookId, activeChapterId]);
+  }, [user, activeBookId, activeChapterId]);
 
   const handleUpdateTitle = useCallback(async (title: string) => {
-    if (activeBookId && activeChapterId) {
-      const updatedBooks = await storageService.updateChapter(activeBookId, activeChapterId, activeChapter?.content || '', title);
-      setBooks(updatedBooks);
+    if (user && activeBookId && activeChapterId) {
+      const result = await storageService.updateChapter(activeBookId, activeChapterId, activeChapter?.content || '', user.id, title);
+      setBooks(result.books);
+      setStorageMode(result.mode);
     }
-  }, [activeBookId, activeChapterId, activeChapter?.content]);
+  }, [user, activeBookId, activeChapterId, activeChapter?.content]);
 
   const handleAddChapter = async () => {
-    if (activeBookId) {
-      const updatedBooks = await storageService.addChapter(activeBookId);
-      setBooks(updatedBooks);
-      const updatedBook = updatedBooks.find(b => b.id === activeBookId);
+    if (user && activeBookId) {
+      const result = await storageService.addChapter(activeBookId, user.id);
+      setBooks(result.books);
+      setStorageMode(result.mode);
+      const updatedBook = result.books.find(b => b.id === activeBookId);
       if (updatedBook) {
         setActiveChapterId(updatedBook.chapters[updatedBook.chapters.length - 1].id);
       }
@@ -60,14 +96,16 @@ const App: React.FC = () => {
   };
 
   const handleAddBook = async (title: string) => {
-    const updatedBooks = await storageService.addBook(title);
-    setBooks(updatedBooks);
-    const newBook = updatedBooks[updatedBooks.length - 1];
-    setActiveBookId(newBook.id);
-    setActiveChapterId(newBook.chapters[0].id);
+    if (user) {
+      const result = await storageService.addBook(title, user.id);
+      setBooks(result.books);
+      setStorageMode(result.mode);
+      const newBook = result.books[result.books.length - 1];
+      setActiveBookId(newBook.id);
+      setActiveChapterId(newBook.chapters[0].id);
+    }
   };
 
-  // AI Actions
   const onFixGrammar = async () => {
     if (!activeChapter) return;
     setIsAIProcessing(true);
@@ -101,8 +139,6 @@ const App: React.FC = () => {
     if (aiType === 'grammar') {
       newContent = aiResult.suggestion;
     } else if (aiType === 'expand') {
-      // Very simple replacement/insertion for expansion demo
-      // In a real editor this would be more precise
       newContent = activeChapter.content.replace(aiResult.original, aiResult.suggestion);
     }
     
@@ -121,31 +157,48 @@ const App: React.FC = () => {
     );
   }
 
+  if (!user) {
+    return <Auth onAuthSuccess={handleAuthSuccess} />;
+  }
+
   return (
     <div className="flex h-screen bg-white overflow-hidden">
       <Sidebar 
+        user={user}
         books={books}
         activeBookId={activeBookId}
         activeChapterId={activeChapterId}
+        storageMode={storageMode}
         onSelectBook={setActiveBookId}
         onSelectChapter={setActiveChapterId}
         onAddChapter={handleAddChapter}
         onAddBook={handleAddBook}
+        onLogout={handleLogout}
       />
       
       <main className="flex-1 flex flex-col min-w-0 bg-slate-50 relative">
+        {storageMode === 'simulated' && (
+          <div className="bg-amber-100/80 backdrop-blur-md border-b border-amber-200 px-4 py-1.5 flex items-center justify-center gap-2 z-10">
+            <i className="fa-solid fa-triangle-exclamation text-amber-600 text-[10px]"></i>
+            <p className="text-[10px] font-bold text-amber-900 uppercase tracking-widest">
+              Simulation Mode: MongoDB connection failed. Using local storage.
+            </p>
+          </div>
+        )}
+        
         <header className="h-16 border-b bg-white flex items-center justify-between px-8 shrink-0">
           <div className="flex items-center gap-4">
             <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider">
-              {activeBook?.title}
+              {activeBook?.title || 'No Book Selected'}
             </h2>
             <span className="text-slate-300">/</span>
             <input 
+              disabled={!activeChapter}
               type="text"
               value={activeChapter?.title || ''}
               onChange={(e) => handleUpdateTitle(e.target.value)}
-              className="font-medium text-slate-800 bg-transparent border-none focus:outline-none focus:ring-0 w-64"
-              placeholder="Chapter Title"
+              className="font-medium text-slate-800 bg-transparent border-none focus:outline-none focus:ring-0 w-64 disabled:opacity-50"
+              placeholder={activeBook ? "Chapter Title" : "Create a book to start"}
             />
           </div>
           
@@ -155,7 +208,7 @@ const App: React.FC = () => {
             </span>
             <button 
               onClick={onFixGrammar}
-              disabled={isAIProcessing}
+              disabled={isAIProcessing || !activeChapter}
               className="flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition-all disabled:opacity-50"
             >
               <i className="fa-solid fa-wand-magic-sparkles text-indigo-500"></i>
@@ -163,7 +216,7 @@ const App: React.FC = () => {
             </button>
             <button 
               onClick={() => onExpandText('')}
-              disabled={isAIProcessing}
+              disabled={isAIProcessing || !activeChapter}
               className="flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-semibold bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm transition-all disabled:opacity-50"
             >
               <i className="fa-solid fa-plus"></i>

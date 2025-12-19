@@ -1,4 +1,11 @@
 
+export type StorageMode = 'real' | 'simulated';
+
+export interface User {
+  id: string;
+  email: string;
+}
+
 export interface Chapter {
   id: string;
   title: string;
@@ -8,6 +15,7 @@ export interface Chapter {
 
 export interface Book {
   id: string;
+  userId: string; // Scoped to a specific user
   title: string;
   author: string;
   createdAt: number;

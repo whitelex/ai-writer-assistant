@@ -1,19 +1,33 @@
 
-import { Book, Chapter } from '../types';
+import { Book, Chapter, StorageMode } from '../types';
 
 const STORAGE_KEY = 'inkwell_books_data';
-
-// Note: In a real Vercel production environment, you would use:
-// const MONGODB_URI = process.env.MONGODB_URI;
-// And fetch from '/api/books'
+const API_BASE = '/api';
 
 export const storageService = {
-  getBooks: async (): Promise<Book[]> => {
+  // Mode flag is updated during requests
+  mode: 'simulated' as StorageMode,
+
+  async getBooks(userId: string): Promise<{ books: Book[], mode: StorageMode }> {
+    try {
+      const response = await fetch(`${API_BASE}/books?userId=${userId}`);
+      if (response.ok) {
+        const books = await response.json();
+        this.mode = 'real';
+        return { books, mode: 'real' };
+      }
+    } catch (e) {
+      // API failed or missing
+    }
+
+    // Fallback to simulation
+    this.mode = 'simulated';
     const data = localStorage.getItem(STORAGE_KEY);
     if (!data) {
       const initial: Book[] = [{
         id: 'default-book',
-        title: 'Untitled Masterpiece',
+        userId,
+        title: 'My First Masterpiece (Simulated)',
         author: 'Author',
         createdAt: Date.now(),
         chapters: [{
@@ -24,17 +38,37 @@ export const storageService = {
         }]
       }];
       localStorage.setItem(STORAGE_KEY, JSON.stringify(initial));
-      return initial;
+      return { books: initial, mode: 'simulated' };
     }
-    return JSON.parse(data);
+    const allBooks: Book[] = JSON.parse(data);
+    return { books: allBooks.filter(book => book.userId === userId), mode: 'simulated' };
   },
 
-  saveBooks: async (books: Book[]): Promise<void> => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(books));
+  async saveBooks(books: Book[], userId: string): Promise<StorageMode> {
+    try {
+      const response = await fetch(`${API_BASE}/books/save`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, books })
+      });
+      if (response.ok) {
+        this.mode = 'real';
+        return 'real';
+      }
+    } catch (e) {
+      // API failed
+    }
+
+    this.mode = 'simulated';
+    const data = localStorage.getItem(STORAGE_KEY);
+    let allBooks: Book[] = data ? JSON.parse(data) : [];
+    allBooks = allBooks.filter(b => b.userId !== userId).concat(books);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(allBooks));
+    return 'simulated';
   },
 
-  updateChapter: async (bookId: string, chapterId: string, content: string, title?: string): Promise<Book[]> => {
-    const books = await storageService.getBooks();
+  async updateChapter(bookId: string, chapterId: string, content: string, userId: string, title?: string): Promise<{ books: Book[], mode: StorageMode }> {
+    const { books } = await this.getBooks(userId);
     const newBooks = books.map(book => {
       if (book.id === bookId) {
         return {
@@ -54,12 +88,12 @@ export const storageService = {
       }
       return book;
     });
-    await storageService.saveBooks(newBooks);
-    return newBooks;
+    const mode = await this.saveBooks(newBooks, userId);
+    return { books: newBooks, mode };
   },
 
-  addChapter: async (bookId: string): Promise<Book[]> => {
-    const books = await storageService.getBooks();
+  async addChapter(bookId: string, userId: string): Promise<{ books: Book[], mode: StorageMode }> {
+    const { books } = await this.getBooks(userId);
     const newBooks = books.map(book => {
       if (book.id === bookId) {
         const newChapter: Chapter = {
@@ -72,14 +106,15 @@ export const storageService = {
       }
       return book;
     });
-    await storageService.saveBooks(newBooks);
-    return newBooks;
+    const mode = await this.saveBooks(newBooks, userId);
+    return { books: newBooks, mode };
   },
 
-  addBook: async (title: string): Promise<Book[]> => {
-    const books = await storageService.getBooks();
+  async addBook(title: string, userId: string): Promise<{ books: Book[], mode: StorageMode }> {
+    const { books } = await this.getBooks(userId);
     const newBook: Book = {
       id: `book-${Date.now()}`,
+      userId,
       title,
       author: 'Author',
       createdAt: Date.now(),
@@ -91,7 +126,7 @@ export const storageService = {
       }]
     };
     const newBooks = [...books, newBook];
-    await storageService.saveBooks(newBooks);
-    return newBooks;
+    const mode = await this.saveBooks(newBooks, userId);
+    return { books: newBooks, mode };
   }
 };
