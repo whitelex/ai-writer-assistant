@@ -5,7 +5,6 @@ const STORAGE_KEY = 'inkwell_books_data';
 const API_BASE = '/api';
 
 export const storageService = {
-  // Mode flag is updated during requests
   mode: 'simulated' as StorageMode,
 
   async getBooks(userId: string): Promise<{ books: Book[], mode: StorageMode }> {
@@ -15,9 +14,12 @@ export const storageService = {
         const books = await response.json();
         this.mode = 'real';
         return { books, mode: 'real' };
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        console.warn('API returned non-ok status:', response.status, errorData);
       }
     } catch (e) {
-      // API failed or missing
+      console.error('Storage API Fetch Error:', e);
     }
 
     // Fallback to simulation
@@ -46,7 +48,7 @@ export const storageService = {
 
   async saveBooks(books: Book[], userId: string): Promise<StorageMode> {
     try {
-      const response = await fetch(`${API_BASE}/books/save`, {
+      const response = await fetch(`${API_BASE}/save`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId, books })
@@ -54,9 +56,12 @@ export const storageService = {
       if (response.ok) {
         this.mode = 'real';
         return 'real';
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        console.warn('API Save returned non-ok status:', response.status, errorData);
       }
     } catch (e) {
-      // API failed
+      console.error('Storage API Save Error:', e);
     }
 
     this.mode = 'simulated';
