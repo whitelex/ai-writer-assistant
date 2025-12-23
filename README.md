@@ -1,3 +1,4 @@
+
 # Inkwell AI Writer
 
 Inkwell is a sophisticated long-form writing environment designed for novelists and creative writers. It features AI-powered grammar refinement, intelligent text expansion with side-by-side previews, and a clean, distraction-free interface for managing books and chapters.
@@ -18,14 +19,17 @@ Deploying Inkwell to Vercel is straightforward. Follow these steps to get your A
 ### 1. Prerequisites
 - A [Vercel](https://vercel.com/) account.
 - A [Google AI Studio API Key](https://aistudio.google.com/app/apikey).
+- A MongoDB database (e.g., from MongoDB Atlas).
 
 ### 2. Deployment Steps
 
 #### Via Vercel Dashboard (Recommended)
 1. Push your code to a GitHub, GitLab, or Bitbucket repository.
 2. Import the project into Vercel.
-3. In the **Environment Variables** section, add the following key:
+3. In the **Environment Variables** section, add the following keys:
    - `API_KEY`: Your Gemini API Key from Google AI Studio.
+   - `MONGODB_URI`: Your MongoDB connection string.
+   - `MONGODB_DB`: The name of the database to use (defaults to `inkwell`).
 4. Click **Deploy**.
 
 #### Via Vercel CLI
@@ -33,9 +37,11 @@ If you have the Vercel CLI installed, run:
 ```bash
 vercel
 ```
-When prompted for environment variables during or after the first deployment:
+When prompted for environment variables:
 ```bash
 vercel env add API_KEY
+vercel env add MONGODB_URI
+vercel env add MONGODB_DB
 ```
 
 ### 3. Environment Variables
@@ -43,7 +49,8 @@ vercel env add API_KEY
 | Variable | Description | Required |
 |----------|-------------|----------|
 | `API_KEY` | Your Google Gemini API key used for grammar and expansion features. | **Yes** |
-| `MONGODB_URI` | (Optional) Future-proofing for database integration. Current version uses `localStorage`. | No |
+| `MONGODB_URI` | Your MongoDB connection string. If missing, the app falls back to `localStorage`. | No (Fallback active) |
+| `MONGODB_DB` | The name of the database to connect to. | No (Default: `inkwell`) |
 
 ## Local Development
 
@@ -57,6 +64,8 @@ To run Inkwell locally:
 3. Create a `.env` file in the root directory:
    ```env
    API_KEY=your_gemini_api_key_here
+   MONGODB_URI=your_mongodb_uri_here
+   MONGODB_DB=inkwell
    ```
 4. Start the development server:
    ```bash
@@ -68,5 +77,6 @@ To run Inkwell locally:
 - **Framework**: React 19 + Vite
 - **Styling**: Tailwind CSS
 - **AI Engine**: Google Gemini (@google/genai)
+- **Database**: MongoDB
 - **Icons**: Font Awesome 6
 - **Typography**: Inter (UI) and Lora (Editor)
