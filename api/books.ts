@@ -1,6 +1,6 @@
 
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import clientPromise from './_db';
+import clientPromise from './_db.ts';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET') {
@@ -21,6 +21,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).json(books);
   } catch (e: any) {
     console.error('MongoDB Fetch Error:', e);
-    return res.status(500).json({ error: e.message });
+    return res.status(500).json({ error: e.message || 'Internal Server Error' });
   }
 }

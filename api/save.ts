@@ -1,6 +1,6 @@
 
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import clientPromise from './_db';
+import clientPromise from './_db.ts';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
@@ -17,16 +17,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const client = await clientPromise;
     const db = client.db('inkwell');
     
-    // We replace the user's entire collection of books for simplicity in this version
-    // In a larger app, you'd update individual documents
+    // Simple sync strategy: replace user's books
     await db.collection('books').deleteMany({ userId });
     if (books.length > 0) {
-      await db.collection('books').insertMany(books.map(b => ({ ...b, userId })));
+      // Ensure we don't carry over MongoDB _id if it's already present in the incoming data
+      const booksToInsert = books.map(({ _id, ...b }) => ({ ...b, userId }));
+      await db.collection('books').insertMany(booksToInsert);
     }
     
     return res.status(200).json({ success: true });
   } catch (e: any) {
     console.error('MongoDB Save Error:', e);
-    return res.status(500).json({ error: e.message });
+    return res.status(500).json({ error: e.message || 'Internal Server Error' });
   }
 }
