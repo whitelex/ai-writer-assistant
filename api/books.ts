@@ -1,6 +1,6 @@
 
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import clientPromise from './_db.ts';
+import clientPromise from './_db.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET') {

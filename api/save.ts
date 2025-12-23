@@ -1,6 +1,6 @@
 
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import clientPromise from './_db.ts';
+import clientPromise from './_db.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
@@ -21,7 +21,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     await db.collection('books').deleteMany({ userId });
     if (books.length > 0) {
       // Ensure we don't carry over MongoDB _id if it's already present in the incoming data
-      const booksToInsert = books.map(({ _id, ...b }) => ({ ...b, userId }));
+      const booksToInsert = books.map(({ _id, ...b }: any) => ({ ...b, userId }));
       await db.collection('books').insertMany(booksToInsert);
     }
     
