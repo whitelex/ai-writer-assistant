@@ -11,10 +11,8 @@ export const Editor: React.FC<EditorProps> = ({ content, onChange, onExpandReque
   const editorRef = useRef<HTMLDivElement>(null);
   const lastContentRef = useRef(content);
 
-  // Sync external content changes (e.g., from AI or switching chapters)
+  // Sync external content changes
   useEffect(() => {
-    // ONLY update the DOM if the content prop is actually different from our last known state
-    // AND the user is not currently typing (to prevent cursor jumps)
     if (editorRef.current && content !== lastContentRef.current) {
       if (document.activeElement !== editorRef.current) {
         editorRef.current.innerHTML = content;
@@ -47,28 +45,28 @@ export const Editor: React.FC<EditorProps> = ({ content, onChange, onExpandReque
   };
 
   return (
-    <div className="flex flex-col h-full">
-      {/* WYSIWYG Toolbar */}
-      <div className="sticky top-0 z-20 bg-white/80 backdrop-blur-md border border-slate-200 rounded-xl mb-6 p-1.5 flex items-center gap-1 shadow-sm">
+    <div className="flex flex-col items-center w-full max-w-full">
+      {/* Floating Toolbar */}
+      <div className="sticky top-4 z-20 w-full md:max-w-2xl bg-white/90 backdrop-blur-xl border border-slate-200 rounded-2xl mb-8 p-1.5 flex flex-wrap items-center gap-1 shadow-lg shadow-slate-200/50">
         <div className="flex items-center border-r border-slate-200 pr-1 mr-1">
           <button 
             onClick={() => execCommand('formatBlock', '<h1>')}
             title="Heading 1"
-            className="p-2 hover:bg-slate-100 rounded text-slate-700 transition-colors w-9 h-9 flex items-center justify-center font-bold"
+            className="p-2 hover:bg-slate-100 rounded-lg text-slate-700 transition-colors w-9 h-9 flex items-center justify-center font-bold"
           >
             H1
           </button>
           <button 
             onClick={() => execCommand('formatBlock', '<h2>')}
             title="Heading 2"
-            className="p-2 hover:bg-slate-100 rounded text-slate-700 transition-colors w-9 h-9 flex items-center justify-center font-bold"
+            className="p-2 hover:bg-slate-100 rounded-lg text-slate-700 transition-colors w-9 h-9 flex items-center justify-center font-bold"
           >
             H2
           </button>
           <button 
             onClick={() => execCommand('formatBlock', '<p>')}
             title="Normal Text"
-            className="p-2 hover:bg-slate-100 rounded text-slate-700 transition-colors w-9 h-9 flex items-center justify-center"
+            className="p-2 hover:bg-slate-100 rounded-lg text-slate-700 transition-colors w-9 h-9 flex items-center justify-center"
           >
             <i className="fa-solid fa-paragraph text-xs"></i>
           </button>
@@ -78,21 +76,21 @@ export const Editor: React.FC<EditorProps> = ({ content, onChange, onExpandReque
           <button 
             onClick={() => execCommand('bold')}
             title="Bold"
-            className="p-2 hover:bg-slate-100 rounded text-slate-700 transition-colors w-9 h-9 flex items-center justify-center"
+            className="p-2 hover:bg-slate-100 rounded-lg text-slate-700 transition-colors w-9 h-9 flex items-center justify-center"
           >
             <i className="fa-solid fa-bold"></i>
           </button>
           <button 
             onClick={() => execCommand('italic')}
             title="Italic"
-            className="p-2 hover:bg-slate-100 rounded text-slate-700 transition-colors w-9 h-9 flex items-center justify-center"
+            className="p-2 hover:bg-slate-100 rounded-lg text-slate-700 transition-colors w-9 h-9 flex items-center justify-center"
           >
             <i className="fa-solid fa-italic"></i>
           </button>
           <button 
             onClick={() => execCommand('underline')}
             title="Underline"
-            className="p-2 hover:bg-slate-100 rounded text-slate-700 transition-colors w-9 h-9 flex items-center justify-center"
+            className="p-2 hover:bg-slate-100 rounded-lg text-slate-700 transition-colors w-9 h-9 flex items-center justify-center"
           >
             <i className="fa-solid fa-underline"></i>
           </button>
@@ -102,14 +100,14 @@ export const Editor: React.FC<EditorProps> = ({ content, onChange, onExpandReque
           <button 
             onClick={() => execCommand('insertUnorderedList')}
             title="Bullet List"
-            className="p-2 hover:bg-slate-100 rounded text-slate-700 transition-colors w-9 h-9 flex items-center justify-center"
+            className="p-2 hover:bg-slate-100 rounded-lg text-slate-700 transition-colors w-9 h-9 flex items-center justify-center"
           >
             <i className="fa-solid fa-list-ul"></i>
           </button>
           <button 
             onClick={() => execCommand('insertOrderedList')}
             title="Numbered List"
-            className="p-2 hover:bg-slate-100 rounded text-slate-700 transition-colors w-9 h-9 flex items-center justify-center"
+            className="p-2 hover:bg-slate-100 rounded-lg text-slate-700 transition-colors w-9 h-9 flex items-center justify-center"
           >
             <i className="fa-solid fa-list-ol"></i>
           </button>
@@ -119,74 +117,115 @@ export const Editor: React.FC<EditorProps> = ({ content, onChange, onExpandReque
           <button 
             onClick={() => execCommand('removeFormat')}
             title="Clear Formatting"
-            className="p-2 hover:bg-slate-100 rounded text-slate-500 transition-colors w-9 h-9 flex items-center justify-center"
+            className="p-2 hover:bg-slate-100 rounded-lg text-slate-400 transition-colors w-9 h-9 flex items-center justify-center"
           >
             <i className="fa-solid fa-eraser"></i>
           </button>
           <button 
             onClick={onExpandClick}
-            title="Expand selected text with AI"
-            className="p-2 bg-indigo-50 hover:bg-indigo-100 rounded text-indigo-600 transition-colors w-9 h-9 flex items-center justify-center ml-2 border border-indigo-100"
+            title="Expand with AI"
+            className="p-2 bg-indigo-50 hover:bg-indigo-100 rounded-lg text-indigo-600 transition-colors w-9 h-9 flex items-center justify-center border border-indigo-100"
           >
             <i className="fa-solid fa-maximize"></i>
           </button>
         </div>
       </div>
 
-      <div className="relative group flex-1">
+      {/* A4 Page Container */}
+      <div className="relative w-full max-w-[816px] mb-20">
         <style>{`
-          .wysiwyg-editor {
+          .a4-page {
             outline: none;
-            min-height: 70vh;
+            min-height: 1122px; /* A4 aspect ratio height approx at 96dpi */
+            background: white;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            border: 1px solid #e2e8f0;
+            width: 100%;
+            margin: 0 auto;
+            padding: 1.5in 1.2in; /* Standard manuscript/academic margins */
+            font-size: 1.15rem;
+            line-height: 1.8;
+            color: #334155;
+            word-wrap: break-word;
           }
-          .wysiwyg-editor:empty:before {
+          
+          @media (max-width: 768px) {
+            .a4-page {
+              padding: 2rem 1.5rem;
+              min-height: auto;
+              font-size: 1rem;
+            }
+          }
+
+          .a4-page:empty:before {
             content: attr(placeholder);
             color: #94a3b8;
             cursor: text;
           }
-          .wysiwyg-editor h1 {
+
+          .a4-page h1 {
             font-size: 2.25rem;
             font-weight: 700;
+            margin-bottom: 2rem;
+            color: #0f172a;
+            line-height: 1.2;
+            text-align: center;
+          }
+
+          .a4-page h2 {
+            font-size: 1.75rem;
+            font-weight: 600;
+            margin-top: 2.5rem;
+            margin-bottom: 1.25rem;
+            color: #1e293b;
+            line-height: 1.3;
+          }
+
+          .a4-page p {
             margin-bottom: 1.5rem;
+            text-align: justify;
+            text-justify: inter-word;
+          }
+
+          .a4-page ul {
+            list-style-type: disc;
+            margin-left: 2rem;
+            margin-bottom: 1.5rem;
+          }
+
+          .a4-page ol {
+            list-style-type: decimal;
+            margin-left: 2rem;
+            margin-bottom: 1.5rem;
+          }
+
+          .a4-page li {
+            margin-bottom: 0.5rem;
+            padding-left: 0.5rem;
+          }
+
+          .a4-page b, .a4-page strong {
+            font-weight: 700;
             color: #0f172a;
           }
-          .wysiwyg-editor h2 {
-            font-size: 1.5rem;
-            font-weight: 600;
-            margin-top: 2rem;
-            margin-bottom: 1rem;
-            color: #1e293b;
-          }
-          .wysiwyg-editor p {
-            margin-bottom: 1.25rem;
-          }
-          .wysiwyg-editor ul {
-            list-style-type: disc;
-            margin-left: 1.5rem;
-            margin-bottom: 1.25rem;
-          }
-          .wysiwyg-editor ol {
-            list-style-type: decimal;
-            margin-left: 1.5rem;
-            margin-bottom: 1.25rem;
-          }
-          .wysiwyg-editor li {
-            margin-bottom: 0.5rem;
-          }
-          .wysiwyg-editor b, .wysiwyg-editor strong {
-            font-weight: 700;
-          }
-          .wysiwyg-editor i, .wysiwyg-editor em {
+
+          .a4-page i, .a4-page em {
             font-style: italic;
           }
         `}</style>
+        
         <div
           ref={editorRef}
           contentEditable
           onInput={handleInput}
-          className="wysiwyg-editor w-full bg-white border border-slate-100 shadow-sm rounded-2xl editor-font text-xl leading-relaxed text-slate-800 p-12 md:p-16"
-          placeholder="Start writing your masterpiece..."
+          className="a4-page editor-font"
+          placeholder="Begin your story here..."
         />
+        
+        {/* Subtle page indicator for aesthetics */}
+        <div className="absolute -bottom-10 left-0 right-0 text-center text-[10px] text-slate-400 uppercase tracking-[0.2em] font-medium">
+          Manuscript Page 01
+        </div>
       </div>
     </div>
   );

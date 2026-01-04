@@ -17,13 +17,14 @@ const App: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [storageMode, setStorageMode] = useState<StorageMode>('simulated');
   const [storageError, setStorageError] = useState<string | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   
   // AI State
   const [isAIProcessing, setIsAIProcessing] = useState(false);
   const [aiResult, setAiResult] = useState<AIResult | null>(null);
   const [aiType, setAiType] = useState<'expand' | 'grammar' | null>(null);
 
-  // Debounce Ref - fixed NodeJS.Timeout issue by using any for cross-environment compatibility
+  // Debounce Ref
   const saveTimeoutRef = useRef<any>(null);
 
   const initData = async (currentUser: User) => {
@@ -73,7 +74,6 @@ const App: React.FC = () => {
     return text ? text.split(' ').length : 0;
   };
 
-  // Debounced update to the storage service
   const debouncedUpdate = useCallback((newBooks: Book[]) => {
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     
@@ -82,12 +82,11 @@ const App: React.FC = () => {
         const mode = await storageService.saveBooks(newBooks, user.id);
         setStorageMode(mode);
       }
-    }, 1000); // 1 second debounce
+    }, 1000);
   }, [user]);
 
   const handleUpdateContent = useCallback(async (content: string) => {
     if (user && activeBookId && activeChapterId) {
-      // Optimistic state update
       const newBooks = books.map(book => {
         if (book.id === activeBookId) {
           return {
@@ -124,6 +123,7 @@ const App: React.FC = () => {
       const updatedBook = result.books.find(b => b.id === activeBookId);
       if (updatedBook) {
         setActiveChapterId(updatedBook.chapters[updatedBook.chapters.length - 1].id);
+        setSidebarOpen(false);
       }
     }
   };
@@ -136,6 +136,7 @@ const App: React.FC = () => {
       const newBook = result.books[result.books.length - 1];
       setActiveBookId(newBook.id);
       setActiveChapterId(newBook.chapters[0].id);
+      setSidebarOpen(false);
     }
   };
 
@@ -146,8 +147,8 @@ const App: React.FC = () => {
     setIsAIProcessing(false);
     
     if (fixed !== activeChapter.content) {
-      setAiType('grammar');
       setAiResult({ original: activeChapter.content, suggestion: fixed });
+      setAiType('grammar');
     } else {
       alert("Grammar looks good! No major changes suggested.");
     }
@@ -161,8 +162,8 @@ const App: React.FC = () => {
     const expanded = await geminiService.expandText(textToExpand, activeChapter.content);
     setIsAIProcessing(false);
 
-    setAiType('expand');
     setAiResult({ original: textToExpand, suggestion: expanded });
+    setAiType('expand');
   };
 
   const applyAISuggestion = () => {
@@ -177,6 +178,20 @@ const App: React.FC = () => {
     
     handleUpdateContent(newContent);
     setAiResult(null);
+  };
+
+  const handleSelectBook = (id: string) => {
+    setActiveBookId(id);
+    const book = books.find(b => b.id === id);
+    if (book && book.chapters.length > 0) {
+      setActiveChapterId(book.chapters[0].id);
+    }
+    // Don't close sidebar here, let them select chapter
+  };
+
+  const handleSelectChapter = (id: string) => {
+    setActiveChapterId(id);
+    setSidebarOpen(false); // Close on selection on mobile
   };
 
   if (loading) {
@@ -195,78 +210,91 @@ const App: React.FC = () => {
   }
 
   return (
-    <div className="flex h-screen bg-white overflow-hidden">
+    <div className="flex h-screen bg-slate-50 overflow-hidden relative">
       <Sidebar 
         user={user}
         books={books}
         activeBookId={activeBookId}
         activeChapterId={activeChapterId}
         storageMode={storageMode}
-        onSelectBook={setActiveBookId}
-        onSelectChapter={setActiveChapterId}
+        isOpen={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+        onSelectBook={handleSelectBook}
+        onSelectChapter={handleSelectChapter}
         onAddChapter={handleAddChapter}
         onAddBook={handleAddBook}
         onLogout={handleLogout}
       />
       
-      <main className="flex-1 flex flex-col min-w-0 bg-slate-50 relative">
+      <main className="flex-1 flex flex-col min-w-0 bg-slate-100 relative">
         {storageMode === 'simulated' && (
-          <div className="bg-amber-100/90 backdrop-blur-md border-b border-amber-200 px-4 py-2 flex flex-col items-center justify-center z-10">
+          <div className="bg-amber-100/90 backdrop-blur-md border-b border-amber-200 px-4 py-1.5 flex flex-col items-center justify-center z-20">
             <div className="flex items-center gap-2">
               <i className="fa-solid fa-triangle-exclamation text-amber-600 text-[10px]"></i>
               <p className="text-[10px] font-bold text-amber-900 uppercase tracking-widest">
-                Simulation Mode: MongoDB connection failed.
+                Simulation Mode: Database connection failed.
               </p>
             </div>
             {storageError && (
-              <p className="text-[9px] text-amber-700 mt-0.5 font-medium max-w-2xl text-center truncate italic">
+              <p className="hidden md:block text-[9px] text-amber-700 mt-0.5 font-medium max-w-2xl text-center truncate italic">
                 Reason: {storageError}
               </p>
             )}
           </div>
         )}
         
-        <header className="h-16 border-b bg-white flex items-center justify-between px-8 shrink-0">
-          <div className="flex items-center gap-4">
-            <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider truncate max-w-[150px]">
-              {activeBook?.title || 'No Book Selected'}
-            </h2>
-            <span className="text-slate-300">/</span>
-            <input 
-              disabled={!activeChapter}
-              type="text"
-              value={activeChapter?.title || ''}
-              onChange={(e) => handleUpdateTitle(e.target.value)}
-              className="font-medium text-slate-800 bg-transparent border-none focus:outline-none focus:ring-0 w-64 disabled:opacity-50"
-              placeholder={activeBook ? "Chapter Title" : "Create a book to start"}
-            />
+        <header className="h-16 border-b bg-white flex items-center justify-between px-4 md:px-8 shrink-0 z-10 shadow-sm">
+          <div className="flex items-center gap-3 md:gap-4 overflow-hidden">
+            <button 
+              onClick={() => setSidebarOpen(true)}
+              className="md:hidden p-2 -ml-2 text-slate-500 hover:bg-slate-50 rounded-lg transition-colors"
+            >
+              <i className="fa-solid fa-bars-staggered text-lg"></i>
+            </button>
+            
+            <div className="flex items-center gap-2 md:gap-4 overflow-hidden">
+              <h2 className="hidden sm:block text-sm font-semibold text-slate-400 uppercase tracking-wider truncate max-w-[120px]">
+                {activeBook?.title || 'No Book'}
+              </h2>
+              <span className="hidden sm:block text-slate-300">/</span>
+              <input 
+                disabled={!activeChapter}
+                type="text"
+                value={activeChapter?.title || ''}
+                onChange={(e) => handleUpdateTitle(e.target.value)}
+                className="font-bold text-slate-800 bg-transparent border-none focus:outline-none focus:ring-0 w-full sm:w-64 disabled:opacity-50 text-base md:text-lg truncate"
+                placeholder={activeBook ? "Chapter Title" : "Create a book"}
+              />
+            </div>
           </div>
           
-          <div className="flex items-center gap-3">
-            <span className="text-xs text-slate-400 mr-2">
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="hidden lg:block text-xs text-slate-400 mr-2">
               {activeChapter?.wordCount || 0} words
             </span>
             <button 
               onClick={onFixGrammar}
               disabled={isAIProcessing || !activeChapter}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition-all disabled:opacity-50"
+              className="p-2 md:px-3 md:py-1.5 rounded-md text-xs font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition-all disabled:opacity-50"
+              title="Fix Grammar"
             >
-              <i className="fa-solid fa-wand-magic-sparkles text-indigo-500"></i>
-              Fix Grammar
+              <i className="fa-solid fa-wand-magic-sparkles text-indigo-500 md:mr-2"></i>
+              <span className="hidden md:inline">Fix Grammar</span>
             </button>
             <button 
               onClick={() => onExpandText('')}
               disabled={isAIProcessing || !activeChapter}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-semibold bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm transition-all disabled:opacity-50"
+              className="p-2 md:px-3 md:py-1.5 rounded-md text-xs font-semibold bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm transition-all disabled:opacity-50"
+              title="Expand Prose"
             >
-              <i className="fa-solid fa-plus"></i>
-              Expand Prose
+              <i className="fa-solid fa-plus md:mr-2"></i>
+              <span className="hidden md:inline">Expand</span>
             </button>
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto pt-6 pb-24">
-          <div className="max-w-4xl mx-auto px-6 h-full">
+        <div className="flex-1 overflow-y-auto pt-4 md:pt-10 pb-24 bg-slate-100 px-4">
+          <div className="max-w-screen-xl mx-auto flex justify-center">
             <Editor 
               content={activeChapter?.content || ''} 
               onChange={handleUpdateContent}
