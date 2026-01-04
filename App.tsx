@@ -15,6 +15,7 @@ const App: React.FC = () => {
   const [activeBookId, setActiveBookId] = useState<string | null>(null);
   const [activeChapterId, setActiveChapterId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
   const [storageMode, setStorageMode] = useState<StorageMode>('simulated');
   const [storageError, setStorageError] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -25,12 +26,31 @@ const App: React.FC = () => {
   const [aiType, setAiType] = useState<'expand' | 'grammar' | null>(null);
 
   const saveTimeoutRef = useRef<any>(null);
-  const booksRef = useRef<Book[]>([]);
+  const isLoadedRef = useRef(false);
 
-  // Sync ref with state for use in beforeunload
+  // Sync state to persistence via useEffect
   useEffect(() => {
-    booksRef.current = books;
-  }, [books]);
+    // ONLY save if data has been successfully loaded first and there is a user
+    if (!isLoadedRef.current || !user || books.length === 0) return;
+
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    
+    setIsSaving(true);
+    saveTimeoutRef.current = setTimeout(async () => {
+      try {
+        const mode = await storageService.saveBooks(books, user.id);
+        setStorageMode(mode);
+      } catch (err) {
+        console.error("Auto-save failed:", err);
+      } finally {
+        setIsSaving(false);
+      }
+    }, 1000);
+
+    return () => {
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    };
+  }, [books, user]);
 
   const initData = async (currentUser: User) => {
     setLoading(true);
@@ -43,6 +63,8 @@ const App: React.FC = () => {
         setActiveBookId(result.books[0].id);
         setActiveChapterId(result.books[0].chapters[0].id);
       }
+      // CRITICAL: Set loaded to true ONLY after state is populated
+      isLoadedRef.current = true;
     } catch (err) {
       console.error("Failed to load data:", err);
     } finally {
@@ -62,10 +84,9 @@ const App: React.FC = () => {
     };
     init();
 
-    // Prevent data loss on accidental close/refresh
     const handleUnload = () => {
-      if (user && booksRef.current.length > 0) {
-        storageService.saveBooks(booksRef.current, user.id);
+      if (user && isLoadedRef.current && books.length > 0) {
+        storageService.saveBooks(books, user.id);
       }
     };
     window.addEventListener('beforeunload', handleUnload);
@@ -83,6 +104,7 @@ const App: React.FC = () => {
     setBooks([]);
     setActiveBookId(null);
     setActiveChapterId(null);
+    isLoadedRef.current = false;
   };
 
   const activeBook = books.find(b => b.id === activeBookId) || null;
@@ -93,62 +115,43 @@ const App: React.FC = () => {
     return text ? text.split(/\s+/).length : 0;
   };
 
-  const persistData = useCallback((updatedBooks: Book[]) => {
-    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-    
-    saveTimeoutRef.current = setTimeout(async () => {
-      if (user) {
-        const mode = await storageService.saveBooks(updatedBooks, user.id);
-        setStorageMode(mode);
-      }
-    }, 500); // Shorter debounce for better reliability
-  }, [user]);
-
   const handleUpdateContent = useCallback((content: string) => {
     if (!activeBookId || !activeChapterId) return;
 
-    setBooks(prevBooks => {
-      const newBooks = prevBooks.map(book => {
-        if (book.id === activeBookId) {
-          return {
-            ...book,
-            chapters: book.chapters.map(ch => {
-              if (ch.id === activeChapterId) {
-                return { ...ch, content, wordCount: countWords(content) };
-              }
-              return ch;
-            })
-          };
-        }
-        return book;
-      });
-      persistData(newBooks);
-      return newBooks;
-    });
-  }, [activeBookId, activeChapterId, persistData]);
+    setBooks(prevBooks => prevBooks.map(book => {
+      if (book.id === activeBookId) {
+        return {
+          ...book,
+          chapters: book.chapters.map(ch => {
+            if (ch.id === activeChapterId) {
+              return { ...ch, content, wordCount: countWords(content) };
+            }
+            return ch;
+          })
+        };
+      }
+      return book;
+    }));
+  }, [activeBookId, activeChapterId]);
 
   const handleUpdateTitle = useCallback((title: string) => {
     if (!activeBookId || !activeChapterId) return;
 
-    setBooks(prevBooks => {
-      const newBooks = prevBooks.map(book => {
-        if (book.id === activeBookId) {
-          return {
-            ...book,
-            chapters: book.chapters.map(ch => {
-              if (ch.id === activeChapterId) {
-                return { ...ch, title };
-              }
-              return ch;
-            })
-          };
-        }
-        return book;
-      });
-      persistData(newBooks);
-      return newBooks;
-    });
-  }, [activeBookId, activeChapterId, persistData]);
+    setBooks(prevBooks => prevBooks.map(book => {
+      if (book.id === activeBookId) {
+        return {
+          ...book,
+          chapters: book.chapters.map(ch => {
+            if (ch.id === activeChapterId) {
+              return { ...ch, title };
+            }
+            return ch;
+          })
+        };
+      }
+      return book;
+    }));
+  }, [activeBookId, activeChapterId]);
 
   const handleAddChapter = async () => {
     if (user && activeBookId) {
@@ -188,6 +191,7 @@ const App: React.FC = () => {
       }
     } catch (e) {
       setIsAIProcessing(false);
+      console.error("Grammar error:", e);
       alert("AI Editor is momentarily busy. Please try again.");
     }
   };
@@ -211,9 +215,10 @@ const App: React.FC = () => {
       } else {
         alert("The Muse is quiet. Try highlighting a more descriptive sentence.");
       }
-    } catch (e) {
+    } catch (e: any) {
       setIsAIProcessing(false);
-      alert("Expansion failed. Please check your connection.");
+      console.error("Expansion error:", e);
+      alert(`Expansion failed: ${e.message || 'Check your connection.'}`);
     }
   };
 
@@ -226,42 +231,27 @@ const App: React.FC = () => {
     } else if (aiType === 'expand') {
       const formattedExpansion = ` <span class="text-indigo-600 border-b border-indigo-200">${aiResult.suggestion}</span>`;
       
-      // Robust insertion: always append to the last paragraph if possible, or create one
-      if (newContent.includes('</p>')) {
-        const parts = newContent.split('</p>');
-        // Insert into the last actual content paragraph
-        const lastParaIndex = parts.length - 2; 
-        parts[lastParaIndex] = parts[lastParaIndex] + formattedExpansion;
-        newContent = parts.join('</p>');
+      // Inject the expansion at the end of the last paragraph to maintain HTML structure
+      const lastParagraphIndex = newContent.lastIndexOf('</p>');
+      if (lastParagraphIndex !== -1) {
+        newContent = newContent.substring(0, lastParagraphIndex) + formattedExpansion + newContent.substring(lastParagraphIndex);
       } else {
-        newContent = newContent + "<p>" + formattedExpansion + "</p>";
+        newContent += formattedExpansion;
       }
     }
     
     handleUpdateContent(newContent);
     setAiResult(null);
-  };
-
-  const handleSelectBook = (id: string) => {
-    setActiveBookId(id);
-    const book = books.find(b => b.id === id);
-    if (book && book.chapters.length > 0) {
-      setActiveChapterId(book.chapters[0].id);
-    }
-  };
-
-  const handleSelectChapter = (id: string) => {
-    setActiveChapterId(id);
-    setSidebarOpen(false);
+    setAiType(null);
   };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-screen bg-slate-50">
-        <div className="flex flex-col items-center">
-          <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
-          <p className="mt-4 text-slate-600 font-medium">Opening your library...</p>
+      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6">
+        <div className="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center mb-6 animate-pulse">
+          <i className="fa-solid fa-feather-pointed text-white text-3xl"></i>
         </div>
+        <p className="text-slate-500 font-medium">Preparing your workspace...</p>
       </div>
     );
   }
@@ -271,7 +261,7 @@ const App: React.FC = () => {
   }
 
   return (
-    <div className="flex h-screen bg-slate-50 overflow-hidden relative">
+    <div className="flex h-screen bg-slate-50 overflow-hidden font-sans text-slate-900">
       <Sidebar 
         user={user}
         books={books}
@@ -280,90 +270,85 @@ const App: React.FC = () => {
         storageMode={storageMode}
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
-        onSelectBook={handleSelectBook}
-        onSelectChapter={handleSelectChapter}
+        onSelectBook={(id) => setActiveBookId(id)}
+        onSelectChapter={(id) => setActiveChapterId(id)}
         onAddChapter={handleAddChapter}
         onAddBook={handleAddBook}
         onLogout={handleLogout}
       />
-      
-      <main className="flex-1 flex flex-col min-w-0 bg-slate-100 relative">
-        <header className="h-16 border-b bg-white flex items-center justify-between px-4 md:px-8 shrink-0 z-10 shadow-sm">
-          <div className="flex items-center gap-3 md:gap-4 overflow-hidden">
+
+      <main className="flex-1 flex flex-col h-full overflow-hidden relative">
+        {/* Header */}
+        <header className="h-16 border-b bg-white flex items-center justify-between px-4 md:px-8 shrink-0">
+          <div className="flex items-center gap-4">
             <button 
               onClick={() => setSidebarOpen(true)}
-              className="md:hidden p-2 -ml-2 text-slate-500 hover:bg-slate-50 rounded-lg transition-colors"
+              className="md:hidden p-2 text-slate-500 hover:bg-slate-100 rounded-lg"
             >
-              <i className="fa-solid fa-bars-staggered text-lg"></i>
+              <i className="fa-solid fa-bars-staggered"></i>
             </button>
-            
-            <div className="flex items-center gap-2 md:gap-4 overflow-hidden">
-              <h2 className="hidden sm:block text-sm font-semibold text-slate-400 uppercase tracking-wider truncate max-w-[120px]">
-                {activeBook?.title || 'No Book'}
-              </h2>
-              <span className="hidden sm:block text-slate-300">/</span>
+            <div className="hidden sm:block">
               <input 
-                disabled={!activeChapter}
                 type="text"
                 value={activeChapter?.title || ''}
                 onChange={(e) => handleUpdateTitle(e.target.value)}
-                className="font-bold text-slate-800 bg-transparent border-none focus:outline-none focus:ring-0 w-full sm:w-64 disabled:opacity-50 text-base md:text-lg truncate"
-                placeholder={activeBook ? "Chapter Title" : "Select a book"}
+                className="bg-transparent border-none text-lg font-bold text-slate-800 focus:outline-none focus:ring-0 w-64"
+                placeholder="Chapter Title"
               />
             </div>
           </div>
-          
-          <div className="flex items-center gap-2 shrink-0">
-            <span className="hidden lg:block text-xs text-slate-400 mr-2">
-              {activeChapter?.wordCount || 0} words
-            </span>
+
+          <div className="flex items-center gap-2 md:gap-4">
+            <div className="hidden md:flex flex-col items-end mr-2 text-[10px] uppercase tracking-wider font-bold">
+              <span className={isSaving ? "text-indigo-500" : "text-slate-400"}>
+                {isSaving ? "Saving..." : "Saved"}
+              </span>
+              <span className="text-slate-300">
+                {activeChapter?.wordCount || 0} words
+              </span>
+            </div>
+
             <button 
               onClick={onFixGrammar}
-              disabled={isAIProcessing || !activeChapter}
-              className="p-2 md:px-3 md:py-1.5 rounded-md text-xs font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition-all disabled:opacity-50"
+              disabled={isAIProcessing}
+              className="px-4 py-2 bg-slate-900 text-white rounded-xl text-sm font-semibold hover:bg-slate-800 transition-all flex items-center gap-2 shadow-lg shadow-slate-200 disabled:opacity-50"
             >
-              <i className="fa-solid fa-wand-magic-sparkles text-indigo-500 md:mr-2"></i>
-              <span className="hidden md:inline">Polish Prose</span>
-            </button>
-            <button 
-              onClick={() => onExpandText('')}
-              disabled={isAIProcessing || !activeChapter}
-              className="p-2 md:px-3 md:py-1.5 rounded-md text-xs font-semibold bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm transition-all disabled:opacity-50"
-            >
-              <i className="fa-solid fa-plus md:mr-2"></i>
-              <span className="hidden md:inline">Expand Scene</span>
+              {isAIProcessing ? (
+                <i className="fa-solid fa-spinner animate-spin"></i>
+              ) : (
+                <i className="fa-solid fa-wand-magic-sparkles"></i>
+              )}
+              <span className="hidden sm:inline">Polish Prose</span>
             </button>
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto pt-4 md:pt-10 pb-24 bg-slate-100 px-4">
-          <div className="max-w-screen-xl mx-auto flex justify-center">
-            <Editor 
-              content={activeChapter?.content || ''} 
-              onChange={handleUpdateContent}
-              onExpandRequest={onExpandText}
-            />
+        {/* Editor Area */}
+        <div className="flex-1 overflow-y-auto bg-slate-50/50 p-4 md:p-8">
+          <div className="max-w-4xl mx-auto">
+            {activeChapter ? (
+              <Editor 
+                content={activeChapter.content}
+                onChange={handleUpdateContent}
+                onExpandRequest={onExpandText}
+              />
+            ) : (
+              <div className="h-64 flex flex-col items-center justify-center text-slate-400 border-2 border-dashed border-slate-200 rounded-3xl">
+                <i className="fa-solid fa-book-open text-4xl mb-4 opacity-20"></i>
+                <p>Select a book or chapter to start writing</p>
+              </div>
+            )}
           </div>
         </div>
-
-        {isAIProcessing && (
-          <div className="absolute inset-0 bg-white/40 backdrop-blur-[1px] flex items-center justify-center z-40">
-            <div className="bg-white p-6 rounded-xl shadow-xl border border-slate-200 flex flex-col items-center max-w-xs text-center">
-              <div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mb-4"></div>
-              <p className="text-sm font-medium text-slate-900">Consulting the editor...</p>
-              <p className="text-xs text-slate-500 mt-2 italic">Refining your voice...</p>
-            </div>
-          </div>
-        )}
-
-        <AIModal 
-          isOpen={!!aiResult} 
-          type={aiType}
-          result={aiResult}
-          onClose={() => setAiResult(null)}
-          onAccept={applyAISuggestion}
-        />
       </main>
+
+      <AIModal 
+        isOpen={!!aiResult}
+        type={aiType}
+        result={aiResult}
+        onClose={() => { setAiResult(null); setAiType(null); }}
+        onAccept={applyAISuggestion}
+      />
     </div>
   );
 };
