@@ -38,9 +38,10 @@ export const AIModal: React.FC<AIModalProps> = ({ isOpen, type, result, onClose,
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
           <section>
             <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Original</h4>
-            <div className="bg-slate-50 border border-slate-100 p-4 rounded-xl text-slate-500 editor-font text-base line-through italic opacity-60">
-              {result.original}
-            </div>
+            <div 
+              className="bg-slate-50 border border-slate-100 p-4 rounded-xl text-slate-500 editor-font text-base line-through italic opacity-60 prose prose-slate max-w-none"
+              dangerouslySetInnerHTML={{ __html: result.original }}
+            />
           </section>
 
           <section>
@@ -48,9 +49,10 @@ export const AIModal: React.FC<AIModalProps> = ({ isOpen, type, result, onClose,
               Suggestion
               <span className="bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full text-[10px]">NEW</span>
             </h4>
-            <div className="bg-indigo-50/30 border border-indigo-100 p-5 rounded-xl text-slate-900 editor-font text-lg leading-relaxed shadow-inner">
-              {result.suggestion}
-            </div>
+            <div 
+              className="bg-indigo-50/30 border border-indigo-100 p-5 rounded-xl text-slate-900 editor-font text-lg leading-relaxed shadow-inner prose prose-indigo max-w-none"
+              dangerouslySetInnerHTML={{ __html: result.suggestion }}
+            />
           </section>
         </div>
 

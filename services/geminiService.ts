@@ -2,39 +2,44 @@
 import { GoogleGenAI } from "@google/genai";
 
 export class GeminiService {
-  // Lazily initialize the client to prevent blocking app load if the key is missing.
   private getClient(): GoogleGenAI {
     const apiKey = process.env.API_KEY;
     if (!apiKey) {
       console.error("Gemini API_KEY is missing from environment variables.");
-      // We return a dummy key to satisfy the constructor, 
-      // the actual API call will fail gracefully in the catch block.
       return new GoogleGenAI({ apiKey: "MISSING_KEY" });
     }
     return new GoogleGenAI({ apiKey });
   }
 
-  async fixGrammar(text: string): Promise<string> {
-    if (!text.trim()) return text;
+  async fixGrammar(html: string): Promise<string> {
+    if (!html.trim()) return html;
     
     try {
       const ai = this.getClient();
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
-        contents: `Fix the grammar, spelling, and punctuation of the following text while strictly preserving the author's original style, tone, and voice. Do not add new sentences or significantly rewrite the prose. Return ONLY the corrected text.\n\nText: "${text}"`,
+        contents: `Fix the grammar, spelling, and punctuation of the following HTML-formatted text.
+        
+        RULES:
+        1. Strictly preserve all HTML tags (like <p>, <b>, <i>, <ul>, <li>, <h1>).
+        2. Preserve the author's original style, tone, and voice.
+        3. Return ONLY the corrected HTML string.
+        
+        HTML: "${html}"`,
         config: {
-          temperature: 0.2,
+          temperature: 0.1,
         }
       });
-      return response.text || text;
+      return response.text?.trim() || html;
     } catch (error) {
       console.error('Gemini Grammar Error:', error);
-      return text;
+      return html;
     }
   }
 
-  async expandText(text: string, context: string): Promise<string> {
-    if (!text.trim()) return "Please select some text to expand.";
+  async expandText(textSnippet: string, fullHtml: string): Promise<string> {
+    const plainSnippet = textSnippet.replace(/<[^>]*>/g, '').trim();
+    if (!plainSnippet) return "Please select some text to expand.";
     
     try {
       const ai = this.getClient();
@@ -42,18 +47,18 @@ export class GeminiService {
         model: 'gemini-3-flash-preview',
         contents: `Act as a creative writing assistant. Expand the following text snippet by adding 2-3 sentences of descriptive detail or character inner-thought that matches the existing style. 
         
-        Context of the chapter so far: "${context.slice(-1000)}"
-        Snippet to expand: "${text}"
+        Context of the chapter (in HTML): "${fullHtml.slice(-1500)}"
+        Snippet to expand: "${plainSnippet}"
         
-        Return ONLY the expanded version (including the original text joined seamlessly with the new content).`,
+        Return ONLY the expanded version. Do NOT include HTML tags in your output unless they are bold or italics for emphasis.`,
         config: {
           temperature: 0.8,
         }
       });
-      return response.text || text;
+      return response.text?.trim() || textSnippet;
     } catch (error) {
       console.error('Gemini Expand Error:', error);
-      return text;
+      return textSnippet;
     }
   }
 }

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { Editor } from './components/Editor';
@@ -64,6 +65,11 @@ const App: React.FC = () => {
   const activeBook = books.find(b => b.id === activeBookId) || null;
   const activeChapter = activeBook?.chapters.find(c => c.id === activeChapterId) || null;
 
+  const countWords = (html: string) => {
+    const text = html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+    return text ? text.split(' ').length : 0;
+  };
+
   const handleUpdateContent = useCallback(async (content: string) => {
     if (user && activeBookId && activeChapterId) {
       const result = await storageService.updateChapter(activeBookId, activeChapterId, content, user.id);
@@ -106,6 +112,7 @@ const App: React.FC = () => {
   const onFixGrammar = async () => {
     if (!activeChapter) return;
     setIsAIProcessing(true);
+    // Strip tags for AI context but keep structure if possible
     const fixed = await geminiService.fixGrammar(activeChapter.content);
     setIsAIProcessing(false);
     
@@ -119,7 +126,7 @@ const App: React.FC = () => {
 
   const onExpandText = async (selectedText: string) => {
     if (!activeChapter) return;
-    const textToExpand = selectedText || activeChapter.content.split('.').slice(-2).join('.');
+    const textToExpand = selectedText || activeChapter.content.replace(/<[^>]*>/g, ' ').split('.').slice(-2).join('.');
     
     setIsAIProcessing(true);
     const expanded = await geminiService.expandText(textToExpand, activeChapter.content);
@@ -136,6 +143,8 @@ const App: React.FC = () => {
     if (aiType === 'grammar') {
       newContent = aiResult.suggestion;
     } else if (aiType === 'expand') {
+      // For expand, if it's plain text expansion we might need careful replacement in HTML
+      // Simplest: replace text content
       newContent = activeChapter.content.replace(aiResult.original, aiResult.suggestion);
     }
     
@@ -192,7 +201,7 @@ const App: React.FC = () => {
         
         <header className="h-16 border-b bg-white flex items-center justify-between px-8 shrink-0">
           <div className="flex items-center gap-4">
-            <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider">
+            <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider truncate max-w-[150px]">
               {activeBook?.title || 'No Book Selected'}
             </h2>
             <span className="text-slate-300">/</span>
@@ -208,7 +217,7 @@ const App: React.FC = () => {
           
           <div className="flex items-center gap-3">
             <span className="text-xs text-slate-400 mr-2">
-              {activeChapter?.wordCount || 0} words
+              {countWords(activeChapter?.content || '')} words
             </span>
             <button 
               onClick={onFixGrammar}
@@ -229,8 +238,8 @@ const App: React.FC = () => {
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto pt-12 pb-24">
-          <div className="max-w-3xl mx-auto">
+        <div className="flex-1 overflow-y-auto pt-6 pb-24">
+          <div className="max-w-4xl mx-auto px-6 h-full">
             <Editor 
               content={activeChapter?.content || ''} 
               onChange={handleUpdateContent}
