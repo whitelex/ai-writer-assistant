@@ -146,24 +146,31 @@ const App: React.FC = () => {
     const fixed = await geminiService.fixGrammar(activeChapter.content);
     setIsAIProcessing(false);
     
-    if (fixed !== activeChapter.content) {
+    if (fixed && fixed !== activeChapter.content) {
       setAiResult({ original: activeChapter.content, suggestion: fixed });
       setAiType('grammar');
     } else {
-      alert("Grammar looks good! No major changes suggested.");
+      alert("Your prose is already excellent! No stylistic changes suggested at this time.");
     }
   };
 
   const onExpandText = async (selectedText: string) => {
     if (!activeChapter) return;
-    const textToExpand = selectedText || activeChapter.content.replace(/<[^>]*>/g, ' ').split('.').slice(-2).join('.');
+    
+    // If user selected text, expand that. If not, use the last 300 characters as context.
+    const textToExpand = selectedText || activeChapter.content.replace(/<[^>]*>/g, ' ').slice(-300);
     
     setIsAIProcessing(true);
-    const expanded = await geminiService.expandText(textToExpand, activeChapter.content);
+    const expandedPart = await geminiService.expandText(textToExpand, activeChapter.content);
     setIsAIProcessing(false);
 
-    setAiResult({ original: textToExpand, suggestion: expanded });
-    setAiType('expand');
+    if (expandedPart) {
+      setAiResult({ 
+        original: selectedText ? `Expand: "${selectedText}"` : "Continuation of the scene...", 
+        suggestion: expandedPart 
+      });
+      setAiType('expand');
+    }
   };
 
   const applyAISuggestion = () => {
@@ -173,7 +180,16 @@ const App: React.FC = () => {
     if (aiType === 'grammar') {
       newContent = aiResult.suggestion;
     } else if (aiType === 'expand') {
-      newContent = activeChapter.content.replace(aiResult.original, aiResult.suggestion);
+      // For expand, we append the suggestion as a new continuation rather than replacing.
+      // This is much more reliable with HTML structure.
+      const formattedExpansion = ` <span class="text-indigo-600 bg-indigo-50/50 rounded px-1">${aiResult.suggestion}</span>`;
+      
+      // Try to insert before the last closing tag if it exists
+      if (newContent.endsWith('</p>')) {
+        newContent = newContent.slice(0, -4) + formattedExpansion + '</p>';
+      } else {
+        newContent = newContent + formattedExpansion;
+      }
     }
     
     handleUpdateContent(newContent);
@@ -186,12 +202,11 @@ const App: React.FC = () => {
     if (book && book.chapters.length > 0) {
       setActiveChapterId(book.chapters[0].id);
     }
-    // Don't close sidebar here, let them select chapter
   };
 
   const handleSelectChapter = (id: string) => {
     setActiveChapterId(id);
-    setSidebarOpen(false); // Close on selection on mobile
+    setSidebarOpen(false);
   };
 
   if (loading) {
@@ -235,11 +250,6 @@ const App: React.FC = () => {
                 Simulation Mode: Database connection failed.
               </p>
             </div>
-            {storageError && (
-              <p className="hidden md:block text-[9px] text-amber-700 mt-0.5 font-medium max-w-2xl text-center truncate italic">
-                Reason: {storageError}
-              </p>
-            )}
           </div>
         )}
         
