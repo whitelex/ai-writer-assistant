@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { Editor } from './components/Editor';
@@ -16,44 +15,42 @@ const App: React.FC = () => {
   const [activeChapterId, setActiveChapterId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [storageMode, setStorageMode] = useState<StorageMode>('simulated');
+  const [storageError, setStorageError] = useState<string | null>(null);
   
   // AI State
   const [isAIProcessing, setIsAIProcessing] = useState(false);
   const [aiResult, setAiResult] = useState<AIResult | null>(null);
   const [aiType, setAiType] = useState<'expand' | 'grammar' | null>(null);
 
+  const initData = async (currentUser: User) => {
+    setLoading(true);
+    const result = await storageService.getBooks(currentUser.id);
+    setBooks(result.books);
+    setStorageMode(result.mode);
+    setStorageError(result.error || null);
+    if (result.books.length > 0) {
+      setActiveBookId(result.books[0].id);
+      setActiveChapterId(result.books[0].chapters[0].id);
+    }
+    setLoading(false);
+  };
+
   useEffect(() => {
     const init = async () => {
       const currentUser = authService.getCurrentUser();
       if (currentUser) {
         setUser(currentUser);
-        const result = await storageService.getBooks(currentUser.id);
-        setBooks(result.books);
-        setStorageMode(result.mode);
-        if (result.books.length > 0) {
-          setActiveBookId(result.books[0].id);
-          setActiveChapterId(result.books[0].chapters[0].id);
-        }
+        await initData(currentUser);
+      } else {
+        setLoading(false);
       }
-      setLoading(false);
     };
     init();
   }, []);
 
   const handleAuthSuccess = async (authenticatedUser: User) => {
     setUser(authenticatedUser);
-    setLoading(true);
-    const result = await storageService.getBooks(authenticatedUser.id);
-    setBooks(result.books);
-    setStorageMode(result.mode);
-    if (result.books.length > 0) {
-      setActiveBookId(result.books[0].id);
-      setActiveChapterId(result.books[0].chapters[0].id);
-    } else {
-      setActiveBookId(null);
-      setActiveChapterId(null);
-    }
-    setLoading(false);
+    await initData(authenticatedUser);
   };
 
   const handleLogout = () => {
@@ -151,7 +148,7 @@ const App: React.FC = () => {
       <div className="flex items-center justify-center h-screen bg-slate-50">
         <div className="flex flex-col items-center">
           <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
-          <p className="mt-4 text-slate-600 font-medium">Initializing Inkwell...</p>
+          <p className="mt-4 text-slate-600 font-medium">Initializing Inkwell Studio...</p>
         </div>
       </div>
     );
@@ -178,11 +175,18 @@ const App: React.FC = () => {
       
       <main className="flex-1 flex flex-col min-w-0 bg-slate-50 relative">
         {storageMode === 'simulated' && (
-          <div className="bg-amber-100/80 backdrop-blur-md border-b border-amber-200 px-4 py-1.5 flex items-center justify-center gap-2 z-10">
-            <i className="fa-solid fa-triangle-exclamation text-amber-600 text-[10px]"></i>
-            <p className="text-[10px] font-bold text-amber-900 uppercase tracking-widest">
-              Simulation Mode: MongoDB connection failed. Using local storage.
-            </p>
+          <div className="bg-amber-100/90 backdrop-blur-md border-b border-amber-200 px-4 py-2 flex flex-col items-center justify-center z-10">
+            <div className="flex items-center gap-2">
+              <i className="fa-solid fa-triangle-exclamation text-amber-600 text-[10px]"></i>
+              <p className="text-[10px] font-bold text-amber-900 uppercase tracking-widest">
+                Simulation Mode: MongoDB connection failed.
+              </p>
+            </div>
+            {storageError && (
+              <p className="text-[9px] text-amber-700 mt-0.5 font-medium max-w-2xl text-center truncate italic">
+                Reason: {storageError}
+              </p>
+            )}
           </div>
         )}
         

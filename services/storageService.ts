@@ -1,4 +1,3 @@
-
 import { Book, Chapter, StorageMode } from '../types';
 
 const STORAGE_KEY = 'inkwell_books_data';
@@ -6,19 +5,23 @@ const API_BASE = '/api';
 
 export const storageService = {
   mode: 'simulated' as StorageMode,
+  lastError: null as string | null,
 
-  async getBooks(userId: string): Promise<{ books: Book[], mode: StorageMode }> {
+  async getBooks(userId: string): Promise<{ books: Book[], mode: StorageMode, error?: string }> {
     try {
       const response = await fetch(`${API_BASE}/books?userId=${userId}`);
       if (response.ok) {
         const books = await response.json();
         this.mode = 'real';
+        this.lastError = null;
         return { books, mode: 'real' };
       } else {
         const errorData = await response.json().catch(() => ({}));
-        console.warn(`Storage API Error (${response.status}):`, errorData.details || errorData.error || 'Unknown error');
+        this.lastError = errorData.details || errorData.error || 'Unknown API Error';
+        console.warn(`Storage API Error (${response.status}):`, this.lastError);
       }
     } catch (e: any) {
+      this.lastError = e.message;
       console.error('Network error connecting to Storage API:', e.message);
     }
 
@@ -40,10 +43,10 @@ export const storageService = {
         }]
       }];
       localStorage.setItem(STORAGE_KEY, JSON.stringify(initial));
-      return { books: initial, mode: 'simulated' };
+      return { books: initial, mode: 'simulated', error: this.lastError || undefined };
     }
     const allBooks: Book[] = JSON.parse(data);
-    return { books: allBooks.filter(book => book.userId === userId), mode: 'simulated' };
+    return { books: allBooks.filter(book => book.userId === userId), mode: 'simulated', error: this.lastError || undefined };
   },
 
   async saveBooks(books: Book[], userId: string): Promise<StorageMode> {
@@ -55,12 +58,15 @@ export const storageService = {
       });
       if (response.ok) {
         this.mode = 'real';
+        this.lastError = null;
         return 'real';
       } else {
         const errorData = await response.json().catch(() => ({}));
-        console.warn(`Storage Save API Error (${response.status}):`, errorData.details || errorData.error || 'Unknown error');
+        this.lastError = errorData.details || errorData.error || 'Unknown API Error';
+        console.warn(`Storage Save API Error (${response.status}):`, this.lastError);
       }
     } catch (e: any) {
+      this.lastError = e.message;
       console.error('Network error during save to Storage API:', e.message);
     }
 

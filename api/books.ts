@@ -1,6 +1,5 @@
-
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import clientPromise from './_db.js';
+import getClientPromise from './_db.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET') {
@@ -14,8 +13,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    // Explicitly wait for connection with a timeout check
-    const client = await clientPromise;
+    const client = await getClientPromise();
     const dbName = process.env.MONGODB_DB;
     const db = dbName ? client.db(dbName) : client.db();
     

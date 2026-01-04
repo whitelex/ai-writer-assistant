@@ -1,6 +1,5 @@
-
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import clientPromise from './_db.js';
+import getClientPromise from './_db.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
@@ -14,14 +13,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const client = await clientPromise;
+    const client = await getClientPromise();
     const dbName = process.env.MONGODB_DB;
     const db = dbName ? client.db(dbName) : client.db();
     
     // Replace user's books
     await db.collection('books').deleteMany({ userId });
     if (books.length > 0) {
-      const booksToInsert = books.map(({ _id, ...b }: any) => ({ ...b, userId }));
+      const booksToInsert = books.map(({ _id, ...b }: any) => {
+        const { _id: id, ...rest } = b;
+        return { ...rest, userId };
+      });
       await db.collection('books').insertMany(booksToInsert);
     }
     
