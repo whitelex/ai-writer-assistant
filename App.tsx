@@ -141,35 +141,47 @@ const App: React.FC = () => {
   };
 
   const onFixGrammar = async () => {
-    if (!activeChapter) return;
+    if (!activeChapter || !activeChapter.content.trim()) return;
     setIsAIProcessing(true);
-    const fixed = await geminiService.fixGrammar(activeChapter.content);
-    setIsAIProcessing(false);
-    
-    if (fixed && fixed !== activeChapter.content) {
-      setAiResult({ original: activeChapter.content, suggestion: fixed });
-      setAiType('grammar');
-    } else {
-      alert("Your prose is already excellent! No stylistic changes suggested at this time.");
+    try {
+      const fixed = await geminiService.fixGrammar(activeChapter.content);
+      setIsAIProcessing(false);
+      
+      if (fixed && fixed !== activeChapter.content) {
+        setAiResult({ original: activeChapter.content, suggestion: fixed });
+        setAiType('grammar');
+      } else {
+        alert("Your editor analyzed your prose and found it already meets elite standards!");
+      }
+    } catch (e) {
+      setIsAIProcessing(false);
+      alert("The editor is currently unavailable. Please check your connection.");
     }
   };
 
   const onExpandText = async (selectedText: string) => {
     if (!activeChapter) return;
     
-    // If user selected text, expand that. If not, use the last 300 characters as context.
-    const textToExpand = selectedText || activeChapter.content.replace(/<[^>]*>/g, ' ').slice(-300);
+    // If no text is selected, we use the last paragraph or bit of text as the expansion seed
+    const contextSnippet = selectedText || activeChapter.content.replace(/<[^>]*>/g, ' ').trim().slice(-300);
     
     setIsAIProcessing(true);
-    const expandedPart = await geminiService.expandText(textToExpand, activeChapter.content);
-    setIsAIProcessing(false);
+    try {
+      const expandedPart = await geminiService.expandText(contextSnippet, activeChapter.content);
+      setIsAIProcessing(false);
 
-    if (expandedPart) {
-      setAiResult({ 
-        original: selectedText ? `Expand: "${selectedText}"` : "Continuation of the scene...", 
-        suggestion: expandedPart 
-      });
-      setAiType('expand');
+      if (expandedPart && expandedPart.trim().length > 0) {
+        setAiResult({ 
+          original: selectedText ? `Expanding: "${selectedText}"` : "Continuing the scene...", 
+          suggestion: expandedPart 
+        });
+        setAiType('expand');
+      } else {
+        alert("Gemini couldn't find a way to expand this specific moment. Try selecting a different sentence.");
+      }
+    } catch (e) {
+      setIsAIProcessing(false);
+      alert("Expansion failed. Please try again.");
     }
   };
 
@@ -180,15 +192,17 @@ const App: React.FC = () => {
     if (aiType === 'grammar') {
       newContent = aiResult.suggestion;
     } else if (aiType === 'expand') {
-      // For expand, we append the suggestion as a new continuation rather than replacing.
-      // This is much more reliable with HTML structure.
-      const formattedExpansion = ` <span class="text-indigo-600 bg-indigo-50/50 rounded px-1">${aiResult.suggestion}</span>`;
+      const formattedExpansion = ` <span class="text-indigo-600 font-medium">${aiResult.suggestion}</span>`;
       
-      // Try to insert before the last closing tag if it exists
-      if (newContent.endsWith('</p>')) {
-        newContent = newContent.slice(0, -4) + formattedExpansion + '</p>';
+      // Robust insertion: Find the last closing paragraph tag or just append
+      const lastParagraphIndex = newContent.lastIndexOf('</p>');
+      if (lastParagraphIndex !== -1) {
+        newContent = 
+          newContent.substring(0, lastParagraphIndex) + 
+          formattedExpansion + 
+          newContent.substring(lastParagraphIndex);
       } else {
-        newContent = newContent + formattedExpansion;
+        newContent = newContent + "<p>" + formattedExpansion + "</p>";
       }
     }
     
@@ -214,7 +228,7 @@ const App: React.FC = () => {
       <div className="flex items-center justify-center h-screen bg-slate-50">
         <div className="flex flex-col items-center">
           <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
-          <p className="mt-4 text-slate-600 font-medium">Initializing Inkwell Studio...</p>
+          <p className="mt-4 text-slate-600 font-medium">Opening your manuscript...</p>
         </div>
       </div>
     );
@@ -242,17 +256,6 @@ const App: React.FC = () => {
       />
       
       <main className="flex-1 flex flex-col min-w-0 bg-slate-100 relative">
-        {storageMode === 'simulated' && (
-          <div className="bg-amber-100/90 backdrop-blur-md border-b border-amber-200 px-4 py-1.5 flex flex-col items-center justify-center z-20">
-            <div className="flex items-center gap-2">
-              <i className="fa-solid fa-triangle-exclamation text-amber-600 text-[10px]"></i>
-              <p className="text-[10px] font-bold text-amber-900 uppercase tracking-widest">
-                Simulation Mode: Database connection failed.
-              </p>
-            </div>
-          </div>
-        )}
-        
         <header className="h-16 border-b bg-white flex items-center justify-between px-4 md:px-8 shrink-0 z-10 shadow-sm">
           <div className="flex items-center gap-3 md:gap-4 overflow-hidden">
             <button 
@@ -286,19 +289,19 @@ const App: React.FC = () => {
               onClick={onFixGrammar}
               disabled={isAIProcessing || !activeChapter}
               className="p-2 md:px-3 md:py-1.5 rounded-md text-xs font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition-all disabled:opacity-50"
-              title="Fix Grammar"
+              title="Polishing Editor"
             >
               <i className="fa-solid fa-wand-magic-sparkles text-indigo-500 md:mr-2"></i>
-              <span className="hidden md:inline">Fix Grammar</span>
+              <span className="hidden md:inline">Polish Prose</span>
             </button>
             <button 
               onClick={() => onExpandText('')}
               disabled={isAIProcessing || !activeChapter}
               className="p-2 md:px-3 md:py-1.5 rounded-md text-xs font-semibold bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm transition-all disabled:opacity-50"
-              title="Expand Prose"
+              title="Inspire & Expand"
             >
               <i className="fa-solid fa-plus md:mr-2"></i>
-              <span className="hidden md:inline">Expand</span>
+              <span className="hidden md:inline">Expand Scene</span>
             </button>
           </div>
         </header>
@@ -317,8 +320,8 @@ const App: React.FC = () => {
           <div className="absolute inset-0 bg-white/40 backdrop-blur-[1px] flex items-center justify-center z-40">
             <div className="bg-white p-6 rounded-xl shadow-xl border border-slate-200 flex flex-col items-center max-w-xs text-center">
               <div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mb-4"></div>
-              <p className="text-sm font-medium text-slate-900">Gemini is thinking...</p>
-              <p className="text-xs text-slate-500 mt-2">Crafting your perfect prose. Please wait a moment.</p>
+              <p className="text-sm font-medium text-slate-900">Your co-writer is thinking...</p>
+              <p className="text-xs text-slate-500 mt-2 italic">"The first draft is just you telling yourself the story."</p>
             </div>
           </div>
         )}
