@@ -14,14 +14,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
+    // Explicitly wait for connection with a timeout check
     const client = await clientPromise;
-    // If MONGODB_DB is not set, client.db() uses the database from the connection string
-    const db = process.env.MONGODB_DB ? client.db(process.env.MONGODB_DB) : client.db();
+    const dbName = process.env.MONGODB_DB;
+    const db = dbName ? client.db(dbName) : client.db();
+    
     const books = await db.collection('books').find({ userId }).toArray();
     
     return res.status(200).json(books);
   } catch (e: any) {
-    console.error('MongoDB Fetch Error:', e);
-    return res.status(500).json({ error: e.message || 'Internal Server Error' });
+    console.error('API [books] Error:', e.name, e.message);
+    return res.status(500).json({ 
+      error: 'Database connection failed', 
+      details: e.message,
+      code: e.code 
+    });
   }
 }

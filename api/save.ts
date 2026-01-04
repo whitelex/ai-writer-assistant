@@ -15,20 +15,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const client = await clientPromise;
-    // If MONGODB_DB is not set, client.db() uses the database from the connection string
-    const db = process.env.MONGODB_DB ? client.db(process.env.MONGODB_DB) : client.db();
+    const dbName = process.env.MONGODB_DB;
+    const db = dbName ? client.db(dbName) : client.db();
     
-    // Simple sync strategy: replace user's books
+    // Replace user's books
     await db.collection('books').deleteMany({ userId });
     if (books.length > 0) {
-      // Ensure we don't carry over MongoDB _id if it's already present in the incoming data
       const booksToInsert = books.map(({ _id, ...b }: any) => ({ ...b, userId }));
       await db.collection('books').insertMany(booksToInsert);
     }
     
     return res.status(200).json({ success: true });
   } catch (e: any) {
-    console.error('MongoDB Save Error:', e);
-    return res.status(500).json({ error: e.message || 'Internal Server Error' });
+    console.error('API [save] Error:', e.name, e.message);
+    return res.status(500).json({ 
+      error: 'Database operation failed', 
+      details: e.message,
+      code: e.code
+    });
   }
 }

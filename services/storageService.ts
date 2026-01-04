@@ -16,10 +16,10 @@ export const storageService = {
         return { books, mode: 'real' };
       } else {
         const errorData = await response.json().catch(() => ({}));
-        console.warn('API connection failed. Status:', response.status, 'Body:', errorData);
+        console.warn(`Storage API Error (${response.status}):`, errorData.details || errorData.error || 'Unknown error');
       }
-    } catch (e) {
-      console.error('Network error connecting to Storage API:', e);
+    } catch (e: any) {
+      console.error('Network error connecting to Storage API:', e.message);
     }
 
     // Fallback to simulation
@@ -58,10 +58,10 @@ export const storageService = {
         return 'real';
       } else {
         const errorData = await response.json().catch(() => ({}));
-        console.warn('API save failed. Status:', response.status, 'Body:', errorData);
+        console.warn(`Storage Save API Error (${response.status}):`, errorData.details || errorData.error || 'Unknown error');
       }
-    } catch (e) {
-      console.error('Network error during save to Storage API:', e);
+    } catch (e: any) {
+      console.error('Network error during save to Storage API:', e.message);
     }
 
     this.mode = 'simulated';
