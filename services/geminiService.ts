@@ -3,59 +3,58 @@ import { GoogleGenAI } from "@google/genai";
 
 export class GeminiService {
   async fixGrammar(html: string): Promise<string> {
-    if (!html.trim()) return html;
+    if (!html.trim() || html === '<p><br></p>') return html;
     
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
-        contents: `TEXT_TO_EDIT: "${html}"`,
+        contents: `[TARGET_PROSE_START]\n${html}\n[TARGET_PROSE_END]`,
         config: {
-          systemInstruction: `You are an elite, aggressive literary editor. 
-          Your goal is to transform the provided HTML prose into a masterpiece.
+          systemInstruction: `You are a ruthless, world-class literary editor. 
+          Your mission is to polish the author's prose into high-art literature.
           
           DIRECTIONS:
-          1. Tighten the prose: eliminate fluff, convert passive voice to active, and fix all mechanical errors.
-          2. Stylistic Upgrade: If the grammar is "fine," improve the word choice and sentence rhythm to make it more evocative.
-          3. CRITICAL: You MUST strictly maintain all HTML structure (tags like <p>, <b>, <i>, <h1>, etc.).
-          4. Return ONLY the resulting polished HTML. No conversational text.
-          5. If the input is very short, still attempt to refine the phrasing.`,
-          temperature: 0.3,
+          1. NEVER say "everything looks good." You must always find a way to improve the flow, impact, or vocabulary.
+          2. Tighten the prose: remove filler words, eliminate passive voice, and fix all mechanical errors.
+          3. Stylistic Polish: Elevate the word choice. Replace mundane verbs with evocative ones.
+          4. CRITICAL: You MUST keep all HTML tags exactly as they are. Do not remove <p>, <b>, <i>, or <h1> tags.
+          5. Return ONLY the transformed HTML. No explanations or meta-commentary.`,
+          temperature: 0.4,
         }
       });
       const result = response.text?.trim();
-      return result && result.length > 5 ? result : html;
+      // Only return if it's substantial and different
+      return (result && result.length > 2) ? result : html;
     } catch (error) {
-      console.error('Gemini Grammar Error:', error);
+      console.error('Gemini Polish Error:', error);
       throw error;
     }
   }
 
   async expandText(textSnippet: string, fullHtml: string): Promise<string> {
     const plainSnippet = textSnippet.replace(/<[^>]*>/g, '').trim();
-    // Use last 1000 chars of plain text for context
-    const context = fullHtml.replace(/<[^>]*>/g, ' ').slice(-1000);
+    const context = fullHtml.replace(/<[^>]*>/g, ' ').slice(-1200);
     
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
-        contents: `CONTEXT: "...${context}"\n\nEXPAND_THIS_IDEA: "${plainSnippet || 'The character pauses to reflect.'}"`,
+        contents: `CONTEXT: "...${context}"\n\nSEED_IDEA: "${plainSnippet || 'The narrative continues.'}"`,
         config: {
-          systemInstruction: `You are a world-class novelist's co-writer. 
-          Your task is to expand the current scene by adding vivid sensory details, internal monologue, or descriptive atmosphere.
+          systemInstruction: `You are a ghostwriter for a bestselling novelist. 
+          Your job is to expand a small idea into 2-3 sentences of vivid, atmospheric prose.
           
           DIRECTIONS:
-          1. Write 2-3 NEW sentences that flow perfectly from the provided context.
-          2. Focus on "Show, Don't Tell" – use evocative imagery.
-          3. Match the tone, tense, and POV of the context exactly.
-          4. Return ONLY the new text to be added. Do NOT repeat the input or add commentary.
-          5. If you cannot expand it creatively, provide a generic but high-quality continuation of the scene.`,
+          1. Provide a direct continuation of the scene.
+          2. Use sensory details (smell, sound, texture) and internal monologue.
+          3. MATCH the tone and tense of the context exactly.
+          4. Return ONLY the new text. Do NOT include the seed or context.
+          5. If the seed is empty, invent a compelling next beat for the story.`,
           temperature: 0.9,
         }
       });
-      const result = response.text?.trim();
-      return result || "";
+      return response.text?.trim() || "";
     } catch (error) {
       console.error('Gemini Expand Error:', error);
       throw error;

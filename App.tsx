@@ -24,20 +24,30 @@ const App: React.FC = () => {
   const [aiResult, setAiResult] = useState<AIResult | null>(null);
   const [aiType, setAiType] = useState<'expand' | 'grammar' | null>(null);
 
-  // Debounce Ref
   const saveTimeoutRef = useRef<any>(null);
+  const booksRef = useRef<Book[]>([]);
+
+  // Sync ref with state for use in beforeunload
+  useEffect(() => {
+    booksRef.current = books;
+  }, [books]);
 
   const initData = async (currentUser: User) => {
     setLoading(true);
-    const result = await storageService.getBooks(currentUser.id);
-    setBooks(result.books);
-    setStorageMode(result.mode);
-    setStorageError(result.error || null);
-    if (result.books.length > 0) {
-      setActiveBookId(result.books[0].id);
-      setActiveChapterId(result.books[0].chapters[0].id);
+    try {
+      const result = await storageService.getBooks(currentUser.id);
+      setBooks(result.books);
+      setStorageMode(result.mode);
+      setStorageError(result.error || null);
+      if (result.books.length > 0) {
+        setActiveBookId(result.books[0].id);
+        setActiveChapterId(result.books[0].chapters[0].id);
+      }
+    } catch (err) {
+      console.error("Failed to load data:", err);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   useEffect(() => {
@@ -51,6 +61,15 @@ const App: React.FC = () => {
       }
     };
     init();
+
+    // Prevent data loss on accidental close/refresh
+    const handleUnload = () => {
+      if (user && booksRef.current.length > 0) {
+        storageService.saveBooks(booksRef.current, user.id);
+      }
+    };
+    window.addEventListener('beforeunload', handleUnload);
+    return () => window.removeEventListener('beforeunload', handleUnload);
   }, []);
 
   const handleAuthSuccess = async (authenticatedUser: User) => {
@@ -71,23 +90,25 @@ const App: React.FC = () => {
 
   const countWords = (html: string) => {
     const text = html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
-    return text ? text.split(' ').length : 0;
+    return text ? text.split(/\s+/).length : 0;
   };
 
-  const debouncedUpdate = useCallback((newBooks: Book[]) => {
+  const persistData = useCallback((updatedBooks: Book[]) => {
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     
     saveTimeoutRef.current = setTimeout(async () => {
       if (user) {
-        const mode = await storageService.saveBooks(newBooks, user.id);
+        const mode = await storageService.saveBooks(updatedBooks, user.id);
         setStorageMode(mode);
       }
-    }, 1000);
+    }, 500); // Shorter debounce for better reliability
   }, [user]);
 
-  const handleUpdateContent = useCallback(async (content: string) => {
-    if (user && activeBookId && activeChapterId) {
-      const newBooks = books.map(book => {
+  const handleUpdateContent = useCallback((content: string) => {
+    if (!activeBookId || !activeChapterId) return;
+
+    setBooks(prevBooks => {
+      const newBooks = prevBooks.map(book => {
         if (book.id === activeBookId) {
           return {
             ...book,
@@ -101,25 +122,38 @@ const App: React.FC = () => {
         }
         return book;
       });
-      
-      setBooks(newBooks);
-      debouncedUpdate(newBooks);
-    }
-  }, [user, activeBookId, activeChapterId, books, debouncedUpdate]);
+      persistData(newBooks);
+      return newBooks;
+    });
+  }, [activeBookId, activeChapterId, persistData]);
 
-  const handleUpdateTitle = useCallback(async (title: string) => {
-    if (user && activeBookId && activeChapterId) {
-      const result = await storageService.updateChapter(activeBookId, activeChapterId, activeChapter?.content || '', user.id, title);
-      setBooks(result.books);
-      setStorageMode(result.mode);
-    }
-  }, [user, activeBookId, activeChapterId, activeChapter?.content]);
+  const handleUpdateTitle = useCallback((title: string) => {
+    if (!activeBookId || !activeChapterId) return;
+
+    setBooks(prevBooks => {
+      const newBooks = prevBooks.map(book => {
+        if (book.id === activeBookId) {
+          return {
+            ...book,
+            chapters: book.chapters.map(ch => {
+              if (ch.id === activeChapterId) {
+                return { ...ch, title };
+              }
+              return ch;
+            })
+          };
+        }
+        return book;
+      });
+      persistData(newBooks);
+      return newBooks;
+    });
+  }, [activeBookId, activeChapterId, persistData]);
 
   const handleAddChapter = async () => {
     if (user && activeBookId) {
       const result = await storageService.addChapter(activeBookId, user.id);
       setBooks(result.books);
-      setStorageMode(result.mode);
       const updatedBook = result.books.find(b => b.id === activeBookId);
       if (updatedBook) {
         setActiveChapterId(updatedBook.chapters[updatedBook.chapters.length - 1].id);
@@ -132,7 +166,6 @@ const App: React.FC = () => {
     if (user) {
       const result = await storageService.addBook(title, user.id);
       setBooks(result.books);
-      setStorageMode(result.mode);
       const newBook = result.books[result.books.length - 1];
       setActiveBookId(newBook.id);
       setActiveChapterId(newBook.chapters[0].id);
@@ -155,15 +188,14 @@ const App: React.FC = () => {
       }
     } catch (e) {
       setIsAIProcessing(false);
-      alert("The editor is currently unavailable. Please check your connection.");
+      alert("AI Editor is momentarily busy. Please try again.");
     }
   };
 
   const onExpandText = async (selectedText: string) => {
     if (!activeChapter) return;
     
-    // If no text is selected, we use the last paragraph or bit of text as the expansion seed
-    const contextSnippet = selectedText || activeChapter.content.replace(/<[^>]*>/g, ' ').trim().slice(-300);
+    const contextSnippet = selectedText || activeChapter.content.replace(/<[^>]*>/g, ' ').trim().slice(-400);
     
     setIsAIProcessing(true);
     try {
@@ -177,11 +209,11 @@ const App: React.FC = () => {
         });
         setAiType('expand');
       } else {
-        alert("Gemini couldn't find a way to expand this specific moment. Try selecting a different sentence.");
+        alert("The Muse is quiet. Try highlighting a more descriptive sentence.");
       }
     } catch (e) {
       setIsAIProcessing(false);
-      alert("Expansion failed. Please try again.");
+      alert("Expansion failed. Please check your connection.");
     }
   };
 
@@ -192,15 +224,15 @@ const App: React.FC = () => {
     if (aiType === 'grammar') {
       newContent = aiResult.suggestion;
     } else if (aiType === 'expand') {
-      const formattedExpansion = ` <span class="text-indigo-600 font-medium">${aiResult.suggestion}</span>`;
+      const formattedExpansion = ` <span class="text-indigo-600 border-b border-indigo-200">${aiResult.suggestion}</span>`;
       
-      // Robust insertion: Find the last closing paragraph tag or just append
-      const lastParagraphIndex = newContent.lastIndexOf('</p>');
-      if (lastParagraphIndex !== -1) {
-        newContent = 
-          newContent.substring(0, lastParagraphIndex) + 
-          formattedExpansion + 
-          newContent.substring(lastParagraphIndex);
+      // Robust insertion: always append to the last paragraph if possible, or create one
+      if (newContent.includes('</p>')) {
+        const parts = newContent.split('</p>');
+        // Insert into the last actual content paragraph
+        const lastParaIndex = parts.length - 2; 
+        parts[lastParaIndex] = parts[lastParaIndex] + formattedExpansion;
+        newContent = parts.join('</p>');
       } else {
         newContent = newContent + "<p>" + formattedExpansion + "</p>";
       }
@@ -228,7 +260,7 @@ const App: React.FC = () => {
       <div className="flex items-center justify-center h-screen bg-slate-50">
         <div className="flex flex-col items-center">
           <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
-          <p className="mt-4 text-slate-600 font-medium">Opening your manuscript...</p>
+          <p className="mt-4 text-slate-600 font-medium">Opening your library...</p>
         </div>
       </div>
     );
@@ -276,7 +308,7 @@ const App: React.FC = () => {
                 value={activeChapter?.title || ''}
                 onChange={(e) => handleUpdateTitle(e.target.value)}
                 className="font-bold text-slate-800 bg-transparent border-none focus:outline-none focus:ring-0 w-full sm:w-64 disabled:opacity-50 text-base md:text-lg truncate"
-                placeholder={activeBook ? "Chapter Title" : "Create a book"}
+                placeholder={activeBook ? "Chapter Title" : "Select a book"}
               />
             </div>
           </div>
@@ -289,7 +321,6 @@ const App: React.FC = () => {
               onClick={onFixGrammar}
               disabled={isAIProcessing || !activeChapter}
               className="p-2 md:px-3 md:py-1.5 rounded-md text-xs font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition-all disabled:opacity-50"
-              title="Polishing Editor"
             >
               <i className="fa-solid fa-wand-magic-sparkles text-indigo-500 md:mr-2"></i>
               <span className="hidden md:inline">Polish Prose</span>
@@ -298,7 +329,6 @@ const App: React.FC = () => {
               onClick={() => onExpandText('')}
               disabled={isAIProcessing || !activeChapter}
               className="p-2 md:px-3 md:py-1.5 rounded-md text-xs font-semibold bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm transition-all disabled:opacity-50"
-              title="Inspire & Expand"
             >
               <i className="fa-solid fa-plus md:mr-2"></i>
               <span className="hidden md:inline">Expand Scene</span>
@@ -320,8 +350,8 @@ const App: React.FC = () => {
           <div className="absolute inset-0 bg-white/40 backdrop-blur-[1px] flex items-center justify-center z-40">
             <div className="bg-white p-6 rounded-xl shadow-xl border border-slate-200 flex flex-col items-center max-w-xs text-center">
               <div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mb-4"></div>
-              <p className="text-sm font-medium text-slate-900">Your co-writer is thinking...</p>
-              <p className="text-xs text-slate-500 mt-2 italic">"The first draft is just you telling yourself the story."</p>
+              <p className="text-sm font-medium text-slate-900">Consulting the editor...</p>
+              <p className="text-xs text-slate-500 mt-2 italic">Refining your voice...</p>
             </div>
           </div>
         )}
