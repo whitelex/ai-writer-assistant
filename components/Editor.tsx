@@ -9,24 +9,34 @@ interface EditorProps {
 
 export const Editor: React.FC<EditorProps> = ({ content, onChange, onExpandRequest }) => {
   const editorRef = useRef<HTMLDivElement>(null);
+  const lastContentRef = useRef(content);
 
   // Sync external content changes (e.g., from AI or switching chapters)
   useEffect(() => {
-    if (editorRef.current && editorRef.current.innerHTML !== content) {
-      editorRef.current.innerHTML = content;
+    // ONLY update the DOM if the content prop is actually different from our last known state
+    // AND the user is not currently typing (to prevent cursor jumps)
+    if (editorRef.current && content !== lastContentRef.current) {
+      if (document.activeElement !== editorRef.current) {
+        editorRef.current.innerHTML = content;
+        lastContentRef.current = content;
+      }
     }
   }, [content]);
 
   const execCommand = (command: string, value: string = '') => {
     document.execCommand(command, false, value);
     if (editorRef.current) {
-      onChange(editorRef.current.innerHTML);
+      const newHtml = editorRef.current.innerHTML;
+      lastContentRef.current = newHtml;
+      onChange(newHtml);
     }
   };
 
   const handleInput = () => {
     if (editorRef.current) {
-      onChange(editorRef.current.innerHTML);
+      const newHtml = editorRef.current.innerHTML;
+      lastContentRef.current = newHtml;
+      onChange(newHtml);
     }
   };
 
@@ -128,6 +138,11 @@ export const Editor: React.FC<EditorProps> = ({ content, onChange, onExpandReque
           .wysiwyg-editor {
             outline: none;
             min-height: 70vh;
+          }
+          .wysiwyg-editor:empty:before {
+            content: attr(placeholder);
+            color: #94a3b8;
+            cursor: text;
           }
           .wysiwyg-editor h1 {
             font-size: 2.25rem;

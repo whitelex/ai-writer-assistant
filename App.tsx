@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { Editor } from './components/Editor';
 import { AIModal } from './components/AIModal';
@@ -22,6 +22,9 @@ const App: React.FC = () => {
   const [isAIProcessing, setIsAIProcessing] = useState(false);
   const [aiResult, setAiResult] = useState<AIResult | null>(null);
   const [aiType, setAiType] = useState<'expand' | 'grammar' | null>(null);
+
+  // Debounce Ref - fixed NodeJS.Timeout issue by using any for cross-environment compatibility
+  const saveTimeoutRef = useRef<any>(null);
 
   const initData = async (currentUser: User) => {
     setLoading(true);
@@ -70,13 +73,40 @@ const App: React.FC = () => {
     return text ? text.split(' ').length : 0;
   };
 
+  // Debounced update to the storage service
+  const debouncedUpdate = useCallback((newBooks: Book[]) => {
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    
+    saveTimeoutRef.current = setTimeout(async () => {
+      if (user) {
+        const mode = await storageService.saveBooks(newBooks, user.id);
+        setStorageMode(mode);
+      }
+    }, 1000); // 1 second debounce
+  }, [user]);
+
   const handleUpdateContent = useCallback(async (content: string) => {
     if (user && activeBookId && activeChapterId) {
-      const result = await storageService.updateChapter(activeBookId, activeChapterId, content, user.id);
-      setBooks(result.books);
-      setStorageMode(result.mode);
+      // Optimistic state update
+      const newBooks = books.map(book => {
+        if (book.id === activeBookId) {
+          return {
+            ...book,
+            chapters: book.chapters.map(ch => {
+              if (ch.id === activeChapterId) {
+                return { ...ch, content, wordCount: countWords(content) };
+              }
+              return ch;
+            })
+          };
+        }
+        return book;
+      });
+      
+      setBooks(newBooks);
+      debouncedUpdate(newBooks);
     }
-  }, [user, activeBookId, activeChapterId]);
+  }, [user, activeBookId, activeChapterId, books, debouncedUpdate]);
 
   const handleUpdateTitle = useCallback(async (title: string) => {
     if (user && activeBookId && activeChapterId) {
@@ -112,7 +142,6 @@ const App: React.FC = () => {
   const onFixGrammar = async () => {
     if (!activeChapter) return;
     setIsAIProcessing(true);
-    // Strip tags for AI context but keep structure if possible
     const fixed = await geminiService.fixGrammar(activeChapter.content);
     setIsAIProcessing(false);
     
@@ -143,8 +172,6 @@ const App: React.FC = () => {
     if (aiType === 'grammar') {
       newContent = aiResult.suggestion;
     } else if (aiType === 'expand') {
-      // For expand, if it's plain text expansion we might need careful replacement in HTML
-      // Simplest: replace text content
       newContent = activeChapter.content.replace(aiResult.original, aiResult.suggestion);
     }
     
@@ -217,7 +244,7 @@ const App: React.FC = () => {
           
           <div className="flex items-center gap-3">
             <span className="text-xs text-slate-400 mr-2">
-              {countWords(activeChapter?.content || '')} words
+              {activeChapter?.wordCount || 0} words
             </span>
             <button 
               onClick={onFixGrammar}
