@@ -16,10 +16,10 @@ export const storageService = {
         return { books, mode: 'real' };
       } else {
         const errorData = await response.json().catch(() => ({}));
-        console.warn('API returned non-ok status:', response.status, errorData);
+        console.warn('API connection failed. Status:', response.status, 'Body:', errorData);
       }
     } catch (e) {
-      console.error('Storage API Fetch Error:', e);
+      console.error('Network error connecting to Storage API:', e);
     }
 
     // Fallback to simulation
@@ -58,10 +58,10 @@ export const storageService = {
         return 'real';
       } else {
         const errorData = await response.json().catch(() => ({}));
-        console.warn('API Save returned non-ok status:', response.status, errorData);
+        console.warn('API save failed. Status:', response.status, 'Body:', errorData);
       }
     } catch (e) {
-      console.error('Storage API Save Error:', e);
+      console.error('Network error during save to Storage API:', e);
     }
 
     this.mode = 'simulated';

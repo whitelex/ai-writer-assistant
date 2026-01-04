@@ -14,9 +14,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const dbName = process.env.MONGODB_DB || 'inkwell';
     const client = await clientPromise;
-    const db = client.db(dbName);
+    // If MONGODB_DB is not set, client.db() uses the database from the connection string
+    const db = process.env.MONGODB_DB ? client.db(process.env.MONGODB_DB) : client.db();
     const books = await db.collection('books').find({ userId }).toArray();
     
     return res.status(200).json(books);
