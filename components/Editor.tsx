@@ -158,7 +158,8 @@ export const Editor: React.FC<EditorProps> = ({ content, onChange, onExpandReque
           }
 
           .a4-page:empty:before {
-            content: attr(placeholder);
+            /* Fix: Changed placeholder to data-placeholder to match HTML attribute and resolve TS error */
+            content: attr(data-placeholder);
             color: #94a3b8;
             cursor: text;
           }
@@ -219,7 +220,8 @@ export const Editor: React.FC<EditorProps> = ({ content, onChange, onExpandReque
           contentEditable
           onInput={handleInput}
           className="a4-page editor-font"
-          placeholder="Begin your story here..."
+          /* Fix: Using data-placeholder instead of placeholder to comply with React/TS div properties */
+          data-placeholder="Begin your story here..."
         />
         
         {/* Subtle page indicator for aesthetics */}

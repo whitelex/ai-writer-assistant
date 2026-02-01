@@ -1,39 +1,42 @@
 
 import { User } from '../types';
 
-const USERS_KEY = 'inkwell_users';
 const SESSION_KEY = 'inkwell_session';
+const API_BASE = '/api';
 
 export const authService = {
   signup: async (email: string, password: string): Promise<User> => {
-    const users = JSON.parse(localStorage.getItem(USERS_KEY) || '[]');
-    if (users.find((u: any) => u.email === email)) {
-      throw new Error('User already exists');
+    const response = await fetch(`${API_BASE}/signup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || 'Signup failed');
     }
 
-    const newUser = {
-      id: `user-${Date.now()}`,
-      email,
-      password // In a real app, this would be hashed
-    };
-
-    users.push(newUser);
-    localStorage.setItem(USERS_KEY, JSON.stringify(users));
-    
-    const sessionUser = { id: newUser.id, email: newUser.email };
+    const sessionUser: User = { id: data.id, email: data.email };
     localStorage.setItem(SESSION_KEY, JSON.stringify(sessionUser));
     return sessionUser;
   },
 
   login: async (email: string, password: string): Promise<User> => {
-    const users = JSON.parse(localStorage.getItem(USERS_KEY) || '[]');
-    const user = users.find((u: any) => u.email === email && u.password === password);
+    const response = await fetch(`${API_BASE}/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    });
 
-    if (!user) {
-      throw new Error('Invalid email or password');
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || 'Login failed');
     }
 
-    const sessionUser = { id: user.id, email: user.email };
+    const sessionUser: User = { id: data.id, email: data.email };
     localStorage.setItem(SESSION_KEY, JSON.stringify(sessionUser));
     return sessionUser;
   },
