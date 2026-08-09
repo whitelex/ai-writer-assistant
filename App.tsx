@@ -190,12 +190,6 @@ const App: React.FC = () => {
   const handlePrintBook = useCallback(() => {
     if (!activeBook) return;
 
-    const printWindow = window.open('', '_blank', 'noopener,noreferrer');
-    if (!printWindow) {
-      alert('Unable to open the print preview. Please allow pop-ups and try again.');
-      return;
-    }
-
     const escapeHtml = (value: string) => value
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
@@ -210,7 +204,28 @@ const App: React.FC = () => {
       </section>
     `).join('');
 
-    printWindow.document.write(`
+    const printFrame = document.createElement('iframe');
+    printFrame.setAttribute('aria-hidden', 'true');
+    printFrame.style.position = 'fixed';
+    printFrame.style.right = '0';
+    printFrame.style.bottom = '0';
+    printFrame.style.width = '0';
+    printFrame.style.height = '0';
+    printFrame.style.border = '0';
+
+    document.body.appendChild(printFrame);
+
+    const printDocument = printFrame.contentWindow?.document;
+    const printWindow = printFrame.contentWindow;
+
+    if (!printDocument || !printWindow) {
+      document.body.removeChild(printFrame);
+      alert('Unable to prepare the print document. Please try again.');
+      return;
+    }
+
+    printDocument.open();
+    printDocument.write(`
       <!DOCTYPE html>
       <html lang="en">
         <head>
@@ -302,11 +317,23 @@ const App: React.FC = () => {
         </body>
       </html>
     `);
-    printWindow.document.close();
+    printDocument.close();
+
     printWindow.focus();
+
+    const cleanup = () => {
+      window.removeEventListener('afterprint', cleanup);
+      if (document.body.contains(printFrame)) {
+        document.body.removeChild(printFrame);
+      }
+    };
+
+    window.addEventListener('afterprint', cleanup, { once: true });
+
     printWindow.onload = () => {
+      printWindow.focus();
       printWindow.print();
-      printWindow.close();
+      window.setTimeout(cleanup, 1000);
     };
   }, [activeBook]);
 
