@@ -9,16 +9,23 @@ interface EditorProps {
 
 export const Editor: React.FC<EditorProps> = ({ content, onChange, onExpandRequest }) => {
   const editorRef = useRef<HTMLDivElement>(null);
-  const lastContentRef = useRef(content);
+  const lastContentRef = useRef('');
 
   // Sync external content changes
   useEffect(() => {
-    if (editorRef.current && content !== lastContentRef.current) {
-      if (document.activeElement !== editorRef.current) {
-        editorRef.current.innerHTML = content;
-        lastContentRef.current = content;
-      }
+    if (!editorRef.current) {
+      return;
     }
+
+    if (document.activeElement === editorRef.current) {
+      return;
+    }
+
+    if (editorRef.current.innerHTML !== content) {
+      editorRef.current.innerHTML = content;
+    }
+
+    lastContentRef.current = content;
   }, [content]);
 
   const execCommand = (command: string, value: string = '') => {
