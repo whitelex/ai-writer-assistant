@@ -176,6 +176,140 @@ const App: React.FC = () => {
     }
   };
 
+  const handleRenameBook = useCallback((title: string) => {
+    if (!activeBookId) return;
+
+    setBooks(prevBooks => prevBooks.map(book => {
+      if (book.id === activeBookId) {
+        return { ...book, title };
+      }
+      return book;
+    }));
+  }, [activeBookId]);
+
+  const handlePrintBook = useCallback(() => {
+    if (!activeBook) return;
+
+    const printWindow = window.open('', '_blank', 'noopener,noreferrer');
+    if (!printWindow) {
+      alert('Unable to open the print preview. Please allow pop-ups and try again.');
+      return;
+    }
+
+    const escapeHtml = (value: string) => value
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+
+    const chapterMarkup = activeBook.chapters.map((chapter, index) => `
+      <section class="chapter">
+        <h2>${escapeHtml(chapter.title || `Chapter ${index + 1}`)}</h2>
+        <div class="chapter-content">${chapter.content || '<p></p>'}</div>
+      </section>
+    `).join('');
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html lang="en">
+        <head>
+          <meta charset="UTF-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+          <title>${escapeHtml(activeBook.title)}</title>
+          <style>
+            :root {
+              color-scheme: light;
+            }
+
+            * {
+              box-sizing: border-box;
+            }
+
+            body {
+              margin: 0;
+              font-family: Georgia, "Times New Roman", serif;
+              color: #0f172a;
+              background: #fff;
+              line-height: 1.7;
+            }
+
+            main {
+              max-width: 8.5in;
+              margin: 0 auto;
+              padding: 0.75in;
+            }
+
+            h1 {
+              font-size: 2rem;
+              margin: 0 0 0.5rem;
+              text-align: center;
+            }
+
+            .meta {
+              margin: 0 0 2rem;
+              text-align: center;
+              color: #475569;
+              font-size: 0.95rem;
+            }
+
+            .chapter {
+              margin-top: 2.5rem;
+              page-break-inside: avoid;
+            }
+
+            .chapter:first-of-type {
+              margin-top: 0;
+            }
+
+            h2 {
+              font-size: 1.35rem;
+              margin: 0 0 1rem;
+              border-bottom: 1px solid #cbd5e1;
+              padding-bottom: 0.5rem;
+            }
+
+            .chapter-content p,
+            .chapter-content ul,
+            .chapter-content ol {
+              margin: 0 0 1rem;
+            }
+
+            .chapter-content ul,
+            .chapter-content ol {
+              padding-left: 1.5rem;
+            }
+
+            @media print {
+              body {
+                print-color-adjust: exact;
+                -webkit-print-color-adjust: exact;
+              }
+
+              main {
+                max-width: none;
+                padding: 0;
+              }
+            }
+          </style>
+        </head>
+        <body>
+          <main>
+            <h1>${escapeHtml(activeBook.title)}</h1>
+            <p class="meta">${activeBook.chapters.length} chapter${activeBook.chapters.length === 1 ? '' : 's'}</p>
+            ${chapterMarkup}
+          </main>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.onload = () => {
+      printWindow.print();
+      printWindow.close();
+    };
+  }, [activeBook]);
+
   const onFixGrammar = async () => {
     if (!activeChapter || !activeChapter.content.trim()) return;
     setIsAIProcessing(true);
@@ -274,6 +408,8 @@ const App: React.FC = () => {
         onSelectChapter={(id) => setActiveChapterId(id)}
         onAddChapter={handleAddChapter}
         onAddBook={handleAddBook}
+        onRenameBook={handleRenameBook}
+        onPrintBook={handlePrintBook}
         onLogout={handleLogout}
       />
 
@@ -307,6 +443,15 @@ const App: React.FC = () => {
                 {activeChapter?.wordCount || 0} words
               </span>
             </div>
+
+            <button 
+              onClick={handlePrintBook}
+              disabled={!activeBook}
+              className="px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-xl text-sm font-semibold hover:bg-slate-50 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <i className="fa-solid fa-print"></i>
+              <span className="hidden sm:inline">Print Book</span>
+            </button>
 
             <button 
               onClick={onFixGrammar}

@@ -14,6 +14,8 @@ interface SidebarProps {
   onSelectChapter: (id: string) => void;
   onAddChapter: () => void;
   onAddBook: (title: string) => void;
+  onRenameBook: (title: string) => void;
+  onPrintBook: () => void;
   onLogout: () => void;
 }
 
@@ -29,10 +31,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onSelectChapter,
   onAddChapter,
   onAddBook,
+  onRenameBook,
+  onPrintBook,
   onLogout
 }) => {
   const [isAddingBook, setIsAddingBook] = useState(false);
+  const [isRenamingBook, setIsRenamingBook] = useState(false);
   const [newBookTitle, setNewBookTitle] = useState('');
+  const [renamedBookTitle, setRenamedBookTitle] = useState('');
 
   const activeBook = books.find(b => b.id === activeBookId);
 
@@ -43,6 +49,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
       setNewBookTitle('');
       setIsAddingBook(false);
     }
+  };
+
+  const startRenamingBook = () => {
+    if (!activeBook) return;
+    setRenamedBookTitle(activeBook.title);
+    setIsRenamingBook(true);
+  };
+
+  const handleRenameBookSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmedTitle = renamedBookTitle.trim();
+    if (!trimmedTitle) {
+      setRenamedBookTitle(activeBook?.title || '');
+      setIsRenamingBook(false);
+      return;
+    }
+
+    onRenameBook(trimmedTitle);
+    setIsRenamingBook(false);
   };
 
   return (
@@ -124,14 +149,57 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
           {activeBook && (
             <div>
-              <div className="flex items-center justify-between mb-3 px-2">
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Chapters</h3>
-                <button 
-                  onClick={onAddChapter}
-                  className="text-slate-500 hover:text-white transition-colors p-1"
-                >
-                  <i className="fa-solid fa-plus text-xs"></i>
-                </button>
+              <div className="mb-4 px-2">
+                {isRenamingBook ? (
+                  <form onSubmit={handleRenameBookSubmit} className="mb-3">
+                    <input
+                      autoFocus
+                      type="text"
+                      value={renamedBookTitle}
+                      onChange={(e) => setRenamedBookTitle(e.target.value)}
+                      onBlur={() => {
+                        if (!renamedBookTitle.trim()) {
+                          setRenamedBookTitle(activeBook.title);
+                          setIsRenamingBook(false);
+                        }
+                      }}
+                      className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500"
+                    />
+                  </form>
+                ) : (
+                  <div className="mb-3">
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Selected Book</p>
+                    <div className="mt-1 flex items-start justify-between gap-3">
+                      <h2 className="text-sm font-semibold text-white leading-5 break-words">{activeBook.title}</h2>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          onClick={startRenamingBook}
+                          title="Rename book"
+                          className="text-slate-500 hover:text-white transition-colors p-1.5"
+                        >
+                          <i className="fa-solid fa-pen-to-square text-xs"></i>
+                        </button>
+                        <button
+                          onClick={onPrintBook}
+                          title="Print book"
+                          className="text-slate-500 hover:text-white transition-colors p-1.5"
+                        >
+                          <i className="fa-solid fa-print text-xs"></i>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Chapters</h3>
+                  <button 
+                    onClick={onAddChapter}
+                    className="text-slate-500 hover:text-white transition-colors p-1"
+                  >
+                    <i className="fa-solid fa-plus text-xs"></i>
+                  </button>
+                </div>
               </div>
               <div className="space-y-1">
                 {activeBook.chapters.map((ch, idx) => (
