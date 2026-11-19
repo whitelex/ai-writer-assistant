@@ -3,6 +3,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { Editor } from './components/Editor';
 import { AIModal } from './components/AIModal';
+import { IdeaInbox } from './components/IdeaInbox';
 import { Auth } from './components/Auth';
 import { storageService } from './services/storageService';
 import { authService } from './services/authService';
@@ -19,6 +20,7 @@ const App: React.FC = () => {
   const [storageMode, setStorageMode] = useState<StorageMode>('simulated');
   const [storageError, setStorageError] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [ideaInboxOpen, setIdeaInboxOpen] = useState(false);
   
   // AI State
   const [isAIProcessing, setIsAIProcessing] = useState(false);
@@ -441,6 +443,7 @@ const App: React.FC = () => {
       />
 
       <main className="flex-1 flex flex-col h-full overflow-hidden relative">
+        {ideaInboxOpen && activeBook && <IdeaInbox book={activeBook} onClose={() => setIdeaInboxOpen(false)} />}
         {/* Header */}
         <header className="h-16 border-b bg-white flex items-center justify-between px-4 md:px-8 shrink-0">
           <div className="flex items-center gap-4">
@@ -462,6 +465,7 @@ const App: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2 md:gap-4">
+            <button onClick={() => setIdeaInboxOpen(true)} disabled={!activeBook} className="px-3 py-2 bg-indigo-50 text-indigo-700 rounded-xl text-sm font-semibold disabled:opacity-50">💡 Idea Inbox</button>
             <div className="hidden md:flex flex-col items-end mr-2 text-[10px] uppercase tracking-wider font-bold">
               <span className={isSaving ? "text-indigo-500" : "text-slate-400"}>
                 {isSaving ? "Saving..." : "Saved"}

@@ -1,38 +1,17 @@
-
-import { VercelRequest, VercelResponse } from '@vercel/node';
+import type { VercelRequest, VercelResponse } from '@vercel/node';
 import getClientPromise from './_db.js';
-
+import { signToken, verifyPassword, hashPassword } from './_auth.js';
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-
-  const { email, password } = req.body;
-
-  if (!email || !password) {
-    return res.status(400).json({ error: 'Email and password are required' });
-  }
-
+  res.setHeader('Cache-Control', 'no-store');
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  const { email, password } = req.body || {};
+  if (typeof email !== 'string' || typeof password !== 'string') return res.status(400).json({ error: 'Email and password required' });
   try {
-    const client = await getClientPromise();
-    const dbName = process.env.MONGODB_DB;
-    const db = dbName ? client.db(dbName) : client.db();
-    
-    const user = await db.collection('users').findOne({ 
-      email: email.toLowerCase(), 
-      password: password 
-    });
-
-    if (!user) {
-      return res.status(401).json({ error: 'Invalid email or password' });
-    }
-
-    return res.status(200).json({ 
-      id: user._id.toString(), 
-      email: user.email 
-    });
-  } catch (e: any) {
-    console.error('API [login] Error:', e.message);
-    return res.status(500).json({ error: 'Authentication failed', details: e.message });
-  }
+    const db = (await getClientPromise()).db(process.env.MONGODB_DB || undefined);
+    const users = db.collection('users');
+    const user = await users.findOne({ email: email.trim().toLowerCase() });
+    if (!user || typeof user.password !== 'string' || !verifyPassword(password, user.password)) return res.status(401).json({ error: 'Invalid credentials' });
+    if (!user.password.startsWith('pbkdf2:')) await users.updateOne({ _id: user._id, password: user.password }, { $set: { password: hashPassword(password) } });
+    return res.status(200).json({ id: String(user._id), email: user.email, token: signToken(String(user._id)) });
+  } catch (e) { console.error('Login failed', e); return res.status(500).json({ error: 'Login failed' }); }
 }

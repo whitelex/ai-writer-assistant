@@ -1,16 +1,20 @@
 
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import getClientPromise from './_db.js';
+import { authenticate } from './_auth.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { userId, books } = req.body;
+  const userId = authenticate(req);
+  res.setHeader('Cache-Control', 'no-store');
+  if (!userId) return res.status(401).json({ error: 'Authentication required' });
+  const { books } = req.body || {};
 
-  if (!userId || !Array.isArray(books)) {
-    return res.status(400).json({ error: 'userId and books array are required' });
+  if (!Array.isArray(books) || books.length > 100) {
+    return res.status(400).json({ error: 'Valid books array required' });
   }
 
   try {
@@ -23,6 +27,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     
     // Use surgical updates (bulkWrite) instead of destructive deleteMany
     if (books.length > 0) {
+      if (books.some((book: any) => !book || typeof book.id !== 'string' || !Array.isArray(book.chapters) || book.chapters.some((ch: any) => typeof ch.id !== 'string' || typeof ch.content !== 'string'))) return res.status(400).json({ error: 'Invalid book data' });
       const operations = books.map((book: any) => {
         const { _id, ...rest } = book;
         return {
