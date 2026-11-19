@@ -1,4 +1,5 @@
 import { Book, Chapter, StorageMode } from '../types';
+import { authService } from './authService';
 
 const STORAGE_KEY = 'inkwell_books_data';
 const API_BASE = '/api';
@@ -9,7 +10,7 @@ export const storageService = {
 
   async getBooks(userId: string): Promise<{ books: Book[], mode: StorageMode, error?: string }> {
     try {
-      const response = await fetch(`${API_BASE}/books?userId=${userId}`);
+      const response = await fetch(`${API_BASE}/books`, { headers: authService.authHeaders() });
       if (response.ok) {
         const books = await response.json();
         this.mode = 'real';
@@ -53,7 +54,7 @@ export const storageService = {
     try {
       const response = await fetch(`${API_BASE}/save`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authService.authHeaders() },
         body: JSON.stringify({ userId, books })
       });
       if (response.ok) {
